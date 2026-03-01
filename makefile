@@ -135,15 +135,15 @@ generate_irmas_test_cqt:
 
 clean:
 	@PROCESSED_ROOT="$(PROCESSED_ROOT)" ALLOW_UNSAFE_RM="$(ALLOW_UNSAFE_RM)" $(PY) - <<'PY'
-import os
-from pathlib import Path
-root = Path(__file__).resolve().parent
-target = Path(os.environ.get("PROCESSED_ROOT", "data/processed")).expanduser().resolve()
-allow = os.environ.get("ALLOW_UNSAFE_RM", "0") == "1"
-def is_drive_root(p: Path) -> bool:
-    return p.parent == p
-if not allow:
-    if is_drive_root(target) or target == root or root not in target.parents:
-        raise SystemExit(f"[safe-guard] Refusing to delete: {target}")
-PY
+	import os
+	from pathlib import Path
+	root = Path(__file__).resolve().parent
+	target = Path(os.environ.get("PROCESSED_ROOT", "data/processed")).expanduser().resolve()
+	allow = os.environ.get("ALLOW_UNSAFE_RM", "0") == "1"
+	def is_drive_root(p: Path) -> bool:
+	    return p.parent == p
+	if not allow:
+	    if is_drive_root(target) or target == root or root not in target.parents:
+	        raise SystemExit(f"[safe-guard] Refusing to delete: {target}")
+	PY
 	rm -rf $(PROCESSED_ROOT)
