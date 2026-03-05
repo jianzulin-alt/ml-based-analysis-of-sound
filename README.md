@@ -101,25 +101,34 @@ make test_manifest_irmas
 make generate_irmas_train_cqt
 make generate_irmas_test_cqt
 
-# Generate all preprocessing (no training)
+# Generate all feature presets (default one-shot)
 make all
+
+# Optional: only generate features needed by selected train/test modes
+make all_selected TRAIN_DATASET=chinese TRAIN_FEATURE=mel_cqt TEST_DATASET=chinese TEST_FEATURE=mel_cqt
 ```
 
 ### Training scripts (CLI)
 
 ```bash
-# Interactive numeric menu (dataset + feature)
+# Interactive numeric menu (dataset + feature + task_mode)
 python src/train/train.py
 
 # Non-interactive examples
-python src/train/train.py --dataset chinese --feature mel
-python src/train/train.py --dataset chinese --feature mel_cqt
-python src/train/train.py --dataset irmas --feature mel
-python src/train/train.py --dataset irmas --feature mel_cqt
+python src/train/train.py --dataset chinese --feature mel --task_mode single_label
+python src/train/train.py --dataset chinese --feature cqt --task_mode single_label
+python src/train/train.py --dataset chinese --feature mel_cqt --task_mode multi_label
+python src/train/train.py --dataset irmas --feature mel --task_mode single_label
+python src/train/train.py --dataset irmas --feature cqt --task_mode single_label
+python src/train/train.py --dataset irmas --feature mel_cqt --task_mode multi_label
 
-# Make wrappers
-make train TRAIN_DATASET=chinese TRAIN_FEATURE=mel
-make train TRAIN_DATASET=irmas TRAIN_FEATURE=mel_cqt
+# Multi-label mixed-data policy (Chinese):
+# ask (default) | always | never
+python src/train/train.py --dataset chinese --feature mel_cqt --task_mode multi_label --auto_generate_mixed ask
+
+# Training output plots (auto-saved):
+# src/models/saved_weights/<run_name>/training_curves_<feature>_<task_mode>.png
+# src/models/saved_weights/<run_name>/training_history_<feature>_<task_mode>.csv
 ```
 
 ### Training notebooks (UI click-run)
@@ -131,18 +140,20 @@ Open and run in VSCode/Jupyter:
 ### Test scripts (CLI)
 
 ```bash
-# Interactive numeric menu (dataset + feature)
+# Interactive numeric menu (dataset + feature + task_mode)
 python src/test/test.py
 
 # Non-interactive examples
-python src/test/test.py --dataset chinese --feature mel
-python src/test/test.py --dataset chinese --feature mel_cqt
-python src/test/test.py --dataset irmas --feature mel
-python src/test/test.py --dataset irmas --feature mel_cqt
+python src/test/test.py --dataset chinese --feature mel --task_mode single_label
+python src/test/test.py --dataset chinese --feature cqt --task_mode single_label
+python src/test/test.py --dataset chinese --feature mel_cqt --task_mode multi_label
+python src/test/test.py --dataset irmas --feature mel --task_mode single_label
+python src/test/test.py --dataset irmas --feature cqt --task_mode single_label
+python src/test/test.py --dataset irmas --feature mel_cqt --task_mode multi_label
 
-# Make wrappers
-make test TEST_DATASET=chinese TEST_FEATURE=mel
-make test TEST_DATASET=irmas TEST_FEATURE=mel_cqt
+# Test output plots (auto-saved in checkpoint folder):
+# single-label: test_eval_single_<feature>.png
+# multi-label:  test_eval_multilabel_<feature>.png
 ```
 
 ### Test notebooks (UI click-run)
@@ -175,10 +186,3 @@ Ways to speed up training:
 How to identify the bottleneck:
 - GPU usage stays low (for example `<30%`) while CPU is saturated: CPU/I/O bottleneck.
 - GPU usage is high and VRAM is near full: model compute bottleneck.
-
-If needed, we can add a Windows-safe DataLoader profile with `pin_memory` and `persistent_workers` toggles.
-
-## Datasets
-
-Refer to data README.md [here](data/README.md) for details on datasets
-

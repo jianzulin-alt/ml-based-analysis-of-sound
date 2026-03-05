@@ -49,10 +49,30 @@ def get_device():
 
     return device, use_cuda_amp, use_mps_amp, scaler, pin_mem
 
-def build_model(num_classes: int, dropout: float, in_ch: int = 2, freq_bins: int = 128, device: str = "cpu"):
-    """Instantiates the CRNN model and moves it to the target device."""
-    from src.models.CRNN import CRNN
-    model = CRNN(in_ch=in_ch, num_classes=num_classes, p_drop=dropout, freq_bins=freq_bins)
+def _resolve_model_class(backbone: str):
+    name = str(backbone).strip().lower()
+    if name == "crnn":
+        from src.models.CRNN import CRNN
+
+        return CRNN
+    if name in {"densenet121", "densenet_121", "cnn_densenet_121"}:
+        from src.models.CNN_DenseNet_121 import CNN_DenseNet_121
+
+        return CNN_DenseNet_121
+    raise ValueError(f"Unsupported backbone: {backbone}")
+
+
+def build_model(
+    num_classes: int,
+    dropout: float,
+    in_ch: int = 2,
+    freq_bins: int = 128,
+    device: str = "cpu",
+    backbone: str = "densenet121",
+):
+    """Instantiates the selected model and moves it to the target device."""
+    model_cls = _resolve_model_class(backbone)
+    model = model_cls(in_ch=in_ch, num_classes=num_classes, p_drop=dropout, freq_bins=freq_bins)
     return model.to(device)
 
 def infer_input_shape(dataset) -> tuple[int, int]:
@@ -206,6 +226,7 @@ def multi_label_train_loop(
     audio_cfg: dict,
     resume_from: Optional[Path] = None,
     save_best_stamped: bool = False,
+    backbone: str = "densenet121",
 ):
 
     seed_everything(seed)
@@ -226,32 +247,63 @@ def multi_label_train_loop(
     inferred_in_ch, inferred_freq_bins = infer_input_shape(dataset)
     model_in_ch = inferred_in_ch
     model_freq_bins = inferred_freq_bins
+    model_backbone = str(backbone).strip().lower()
     if resume_from and resume_from.exists():
         try:
             ckpt_meta = torch.load(resume_from, map_location="cpu")
             ckpt_in_ch = ckpt_meta.get("in_ch")
             ckpt_freq_bins = ckpt_meta.get("freq_bins")
+            ckpt_backbone = str(ckpt_meta.get("backbone", model_backbone)).strip().lower()
             if ckpt_in_ch is not None and ckpt_in_ch != model_in_ch:
                 print(f"[WARN] Checkpoint in_ch={ckpt_in_ch} differs from dataset in_ch={model_in_ch}; using checkpoint.")
                 model_in_ch = ckpt_in_ch
             if ckpt_freq_bins is not None and ckpt_freq_bins != model_freq_bins:
                 print(f"[WARN] Checkpoint freq_bins={ckpt_freq_bins} differs from dataset freq_bins={model_freq_bins}; using checkpoint.")
                 model_freq_bins = ckpt_freq_bins
+            if ckpt_backbone != model_backbone:
+                print(f"[WARN] Checkpoint backbone={ckpt_backbone} differs from requested backbone={model_backbone}; using checkpoint.")
+                model_backbone = ckpt_backbone
         except Exception as exc:
             print(f"[WARN] Failed to read checkpoint metadata: {exc}")
 
-    model = build_model(num_classes=len(classes), dropout=dropout, in_ch=model_in_ch, freq_bins=model_freq_bins, device=device)
+    model = build_model(
+        num_classes=len(classes),
+        dropout=dropout,
+        in_ch=model_in_ch,
+        freq_bins=model_freq_bins,
+        device=device,
+        backbone=model_backbone,
+    )
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     criterion = nn.BCEWithLogitsLoss() # This treats each instrument as an independent binary classification task.
 
-    history = {k: [] for k in ["train_loss", "val_loss", "train_micro_f1", "val_micro_f1", "train_macro_f1", "val_macro_f1"]}
+    history = {
+        k: []
+        for k in [
+            "train_loss",
+            "val_loss",
+            "train_acc",
+            "val_acc",
+            "train_micro_f1",
+            "val_micro_f1",
+            "train_macro_f1",
+            "val_macro_f1",
+        ]
+    }
     start_epoch, best_val_f1, no_improve = 1, 0.0, 0
 
     if resume_from and resume_from.exists():
         ckpt = load_checkpoint(resume_from, device, model, optimizer, scheduler, scaler)
         start_epoch = ckpt["epoch"] + 1
         history = ckpt["history"]
+        # Backward compatibility for older checkpoints without accuracy fields.
+        history.setdefault("train_acc", [])
+        history.setdefault("val_acc", [])
+        history.setdefault("train_micro_f1", [])
+        history.setdefault("val_micro_f1", [])
+        history.setdefault("train_macro_f1", [])
+        history.setdefault("val_macro_f1", [])
         best_val_f1 = ckpt.get("best_val_micro_f1", 0.0)
 
     for epoch in range(start_epoch, epochs + 1):
@@ -263,10 +315,15 @@ def multi_label_train_loop(
         
         # Update History
         history["train_loss"].append(train_loss); history["val_loss"].append(val_loss)
+        history["train_acc"].append(train_m["exact_match"]); history["val_acc"].append(val_m["exact_match"])
         history["train_micro_f1"].append(train_m["micro_f1"]); history["val_micro_f1"].append(val_m["micro_f1"])
         history["train_macro_f1"].append(train_m["macro_f1"]); history["val_macro_f1"].append(val_m["macro_f1"])
 
-        print(f"[{epoch}/{epochs}] Loss: {train_loss:.4f}/{val_loss:.4f} | Val MicroF1: {val_m['micro_f1']:.4f} | Time: {time.time()-t0:.1f}s")
+        print(
+            f"[{epoch}/{epochs}] Loss: {train_loss:.4f}/{val_loss:.4f} | "
+            f"Val Acc: {val_m['exact_match']:.4f} | Val MicroF1: {val_m['micro_f1']:.4f} | "
+            f"Time: {time.time()-t0:.1f}s"
+        )
 
         payload = {
             "epoch": epoch,
@@ -278,8 +335,10 @@ def multi_label_train_loop(
             "audio_config": audio_cfg,     # sr, n_mels, hop_ms, etc.
             "label_to_idx": dataset.label_to_idx,
             "feature_mode": "mel",
+            "task_mode": "multi_label",
             "in_ch": model_in_ch,
             "freq_bins": model_freq_bins,
+            "backbone": model_backbone,
         }
         save_checkpoint(payload, ckpt_dir / "last.pt")
 

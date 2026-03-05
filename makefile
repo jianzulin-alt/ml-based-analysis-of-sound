@@ -33,6 +33,37 @@ TRAIN_DATASET ?= chinese
 TRAIN_FEATURE ?= mel
 TEST_DATASET ?= chinese
 TEST_FEATURE ?= mel
+SUPPORTED_DATASETS := chinese irmas
+SUPPORTED_FEATURES := mel cqt mel_cqt
+
+TRAIN_KEY := $(TRAIN_DATASET)_$(TRAIN_FEATURE)
+TEST_KEY := $(TEST_DATASET)_$(TEST_FEATURE)
+
+TRAIN_GEN_TASKS_chinese_mel := convert_mp3_wav generate_train_mels
+TRAIN_GEN_TASKS_chinese_cqt := convert_mp3_wav generate_train_mels generate_chinese_train_cqt
+TRAIN_GEN_TASKS_chinese_mel_cqt := convert_mp3_wav generate_train_mels generate_chinese_train_cqt
+TRAIN_GEN_TASKS_irmas_mel := generate_irmas_train_mels
+TRAIN_GEN_TASKS_irmas_cqt := generate_irmas_train_mels generate_irmas_train_cqt
+TRAIN_GEN_TASKS_irmas_mel_cqt := generate_irmas_train_mels generate_irmas_train_cqt
+
+TEST_GEN_TASKS_chinese_mel := test_manifest_az
+TEST_GEN_TASKS_chinese_cqt := test_manifest_az
+TEST_GEN_TASKS_chinese_mel_cqt := test_manifest_az
+TEST_GEN_TASKS_irmas_mel := test_manifest_irmas
+TEST_GEN_TASKS_irmas_cqt := test_manifest_irmas generate_irmas_test_cqt
+TEST_GEN_TASKS_irmas_mel_cqt := test_manifest_irmas generate_irmas_test_cqt
+
+TRAIN_GEN_TARGETS := $(TRAIN_GEN_TASKS_$(TRAIN_KEY))
+TEST_GEN_TARGETS := $(TEST_GEN_TASKS_$(TEST_KEY))
+
+.PHONY: \
+	all all_full all_selected clean generate \
+	prepare_train_features prepare_test_features validate_targets \
+	generate_train_mels generate_irmas_train_mels \
+	generate_chinese_train_cqt generate_irmas_train_cqt \
+	generate_mixed_train_mels generate_mixed_train_mel_cqt \
+	test_manifest test_manifest_az test_manifest_irmas \
+	generate_irmas_test_cqt convert_mp3_wav
 
 # NOTE: premixing will be replaced with mixing at train time to save storage
 generate_mixed_train_mels:
@@ -70,8 +101,8 @@ TEST_MANIFEST_IRMAS := data/test/IRMAS/IRMAS-TestingData-Part1.csv
 
 generate_features: generate_train_mels generate_mixed_train_mels
 
-# One-shot pipeline (ordered)
-all: \
+# Full preprocessing (legacy ordered pipeline)
+all_full: \
 	convert_mp3_wav \
 	generate_train_mels \
 	generate_chinese_train_cqt \
@@ -81,6 +112,21 @@ all: \
 	test_manifest_az \
 	test_manifest_irmas \
 	generate_irmas_test_cqt
+
+validate_targets:
+	@$(PY_SRC) -c "train_dataset='$(TRAIN_DATASET)'; train_feature='$(TRAIN_FEATURE)'; test_dataset='$(TEST_DATASET)'; test_feature='$(TEST_FEATURE)'; supported_datasets='$(SUPPORTED_DATASETS)'.split(); supported_features='$(SUPPORTED_FEATURES)'.split(); train_targets='$(TRAIN_GEN_TARGETS)'.split(); test_targets='$(TEST_GEN_TARGETS)'.split(); assert train_dataset in supported_datasets, f'Unsupported TRAIN_DATASET={train_dataset}. Expected one of {supported_datasets}'; assert test_dataset in supported_datasets, f'Unsupported TEST_DATASET={test_dataset}. Expected one of {supported_datasets}'; assert train_feature in supported_features, f'Unsupported TRAIN_FEATURE={train_feature}. Expected one of {supported_features}'; assert test_feature in supported_features, f'Unsupported TEST_FEATURE={test_feature}. Expected one of {supported_features}'; assert train_targets, f'No generation steps mapped for TRAIN={train_dataset}/{train_feature}'; assert test_targets, f'No generation steps mapped for TEST={test_dataset}/{test_feature}'; print('[make] TRAIN targets:', ' '.join(train_targets)); print('[make] TEST targets: ', ' '.join(test_targets))"
+
+prepare_train_features: validate_targets $(TRAIN_GEN_TARGETS)
+
+prepare_test_features: validate_targets $(TEST_GEN_TARGETS)
+
+# Smart one-shot feature generation based on train/test selection.
+# Example:
+#   make all_selected TRAIN_DATASET=chinese TRAIN_FEATURE=mel_cqt TEST_DATASET=irmas TEST_FEATURE=mel
+all_selected: prepare_train_features prepare_test_features
+
+# Default one-shot generation: build all feature presets.
+all: all_full
 
 test_manifest:
 	@echo "Creating test manifest..."
@@ -97,23 +143,5 @@ test_manifest_irmas:
 generate_irmas_test_cqt:
 	NUM_WORKERS=$(NUM_WORKERS) $(PY_SRC) src/scripts/generate.py --task irmas_test_cqt
 
-train:
-	$(PY_SRC) src/train/train.py --dataset $(TRAIN_DATASET) --feature $(TRAIN_FEATURE)
-
-test:
-	$(PY_SRC) src/test/test.py --dataset $(TEST_DATASET) --feature $(TEST_FEATURE)
-
 clean:
-	@PROCESSED_ROOT="$(PROCESSED_ROOT)" ALLOW_UNSAFE_RM="$(ALLOW_UNSAFE_RM)" $(PY) - <<'PY'
-	import os
-	from pathlib import Path
-	root = Path(__file__).resolve().parent
-	target = Path(os.environ.get("PROCESSED_ROOT", "data/processed")).expanduser().resolve()
-	allow = os.environ.get("ALLOW_UNSAFE_RM", "0") == "1"
-	def is_drive_root(p: Path) -> bool:
-	    return p.parent == p
-	if not allow:
-	    if is_drive_root(target) or target == root or root not in target.parents:
-	        raise SystemExit(f"[safe-guard] Refusing to delete: {target}")
-	PY
-	rm -rf $(PROCESSED_ROOT)
+	@PROCESSED_ROOT="$(PROCESSED_ROOT)" ALLOW_UNSAFE_RM="$(ALLOW_UNSAFE_RM)" $(PY) -c "import os, shutil, sys; from pathlib import Path; root = Path.cwd().resolve(); raw_target = Path(os.environ.get('PROCESSED_ROOT', 'data/processed')).expanduser(); target = (raw_target if raw_target.is_absolute() else (root / raw_target)).resolve(); allow = os.environ.get('ALLOW_UNSAFE_RM', '0') == '1'; is_drive_root = target.parent == target; blocked = (not allow) and (is_drive_root or target == root or root not in target.parents); sys.exit(f'[safe-guard] Refusing to delete: {target}') if blocked else None; print(f'[clean] Removing: {target}'); shutil.rmtree(target, ignore_errors=True)"

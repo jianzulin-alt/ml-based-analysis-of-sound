@@ -16,7 +16,7 @@ import librosa
 import numpy as np
 import pandas as pd
 
-from preprocessing import load_audio_stereo, ensure_duration
+from preprocessing import load_audio_stereo, ensure_duration, maybe_normalise_loudness
 from utils.safe_paths import guard_path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -83,10 +83,20 @@ def _process_one(
     win_ms: float,
     hop_ms: float,
     fmin: float,
+    loudness_norm: str,
+    target_lufs: float,
+    loudness_peak_limit: float,
 ) -> Tuple[bool, Optional[Path], str, Path, Optional[str]]:
     try:
         stereo = load_audio_stereo(wav_path, target_sr=sr)
         stereo = ensure_duration(stereo, sr, dur)
+        stereo = maybe_normalise_loudness(
+            stereo,
+            sr=sr,
+            loudness_norm=loudness_norm,
+            target_lufs=target_lufs,
+            peak_limit=loudness_peak_limit,
+        )
 
         hop_length = int(round(sr * (hop_ms / 1000.0)))
         cqt = _cqt_stereo2_from_stereo(
@@ -167,6 +177,9 @@ def main():
     ap.add_argument("--hop_ms", type=float, default=10.0)
     ap.add_argument("--fmin", type=float, default=20.0)
     ap.add_argument("--fmax", type=float, default=None)
+    ap.add_argument("--loudness_norm", type=str, default="lufs", choices=["none", "lufs"])
+    ap.add_argument("--target_lufs", type=float, default=-23.0)
+    ap.add_argument("--loudness_peak_limit", type=float, default=0.99)
     ap.add_argument("--num_workers", type=int, default=19)
 
     args = ap.parse_args()
@@ -246,6 +259,9 @@ def main():
                 args.win_ms,
                 args.hop_ms,
                 args.fmin,
+                args.loudness_norm,
+                args.target_lufs,
+                args.loudness_peak_limit,
             )
             if ok:
                 rows_out[idx] = _safe_relpath(out_path, PROJECT_ROOT)
@@ -268,6 +284,9 @@ def main():
                     args.win_ms,
                     args.hop_ms,
                     args.fmin,
+                    args.loudness_norm,
+                    args.target_lufs,
+                    args.loudness_peak_limit,
                 ): idx
                 for idx, wav_path, label in row_items
             }

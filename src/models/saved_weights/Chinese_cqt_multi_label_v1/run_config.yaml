@@ -1,0 +1,38 @@
+dataset: chinese
+feature_mode: cqt
+task_mode: multi_label
+manifests:
+- D:\qingchaolaopian\Instrument Sound\GitHub\ml-based-analysis-of-sound\data\processed\train_mels_mixed.csv
+labels_yaml: src/configs/labels.yaml
+audio_yaml: src/configs/audio_params.yaml
+classes:
+- strings
+- brass
+- percussion
+- woodwind
+- sheng
+- dizi
+- timpani
+- erhu
+- pipa
+- suona
+- guzheng
+- piano
+- guqin
+- xiao
+- yangqin
+train:
+  batch_size: 64
+  lr: 0.001
+  epochs: 120
+  patience: 30
+  weight_decay: 0.0001
+  dropout: 0.5
+  val_frac: 0.2
+  seed: 1337
+  threshold: 0.5
+  num_workers: 0
+mixed_data_policy:
+  auto_generate_mixed: always
+  num_mixes: null
+resume: false

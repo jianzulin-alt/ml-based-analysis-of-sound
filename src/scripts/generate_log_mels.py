@@ -100,6 +100,9 @@ def _process_one(
             hop_ms=audio_cfg["hop_ms"],
             fmin=audio_cfg["fmin"],
             fmax=audio_cfg.get("fmax"),
+            loudness_norm=audio_cfg.get("loudness_norm", "none"),
+            target_lufs=float(audio_cfg.get("target_lufs", -23.0)),
+            loudness_peak_limit=float(audio_cfg.get("loudness_peak_limit", 0.99)),
         )
         return True, npy_path, label, wav_path, None
     except Exception as e:

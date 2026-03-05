@@ -1,0 +1,34 @@
+dataset: irmas
+feature_mode: cqt
+task_mode: multi_label
+manifests:
+- D:\qingchaolaopian\Instrument Sound\GitHub\ml-based-analysis-of-sound\data\processed\irmas_train_mels.csv
+labels_yaml: src/configs/labels_irmas.yaml
+audio_yaml: src/configs/audio_params_irmas.yaml
+classes:
+- cel
+- cla
+- flu
+- gac
+- gel
+- org
+- pia
+- sax
+- tru
+- vio
+- voi
+train:
+  batch_size: 64
+  lr: 0.001
+  epochs: 120
+  patience: 30
+  weight_decay: 0.0001
+  dropout: 0.5
+  val_frac: 0.2
+  seed: 1337
+  threshold: 0.5
+  num_workers: 0
+mixed_data_policy:
+  auto_generate_mixed: always
+  num_mixes: null
+resume: false

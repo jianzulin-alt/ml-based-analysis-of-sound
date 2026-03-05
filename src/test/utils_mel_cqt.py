@@ -8,7 +8,13 @@ from typing import Optional
 from tqdm import tqdm
 import librosa
 
-from src.preprocessing import calc_fft_hop, ensure_duration, load_audio_stereo, mel_stereo2_from_stereo
+from src.preprocessing import (
+    calc_fft_hop,
+    ensure_duration,
+    load_audio_stereo,
+    mel_stereo2_from_stereo,
+    maybe_normalise_loudness,
+)
 
 
 def _read_csv_with_fallback(path: Path) -> pd.DataFrame:
@@ -111,6 +117,13 @@ def load_and_preprocess_mel(path, cfg):
 
     stereo = load_audio_stereo(p, target_sr=cfg['sr'])
     stereo = ensure_duration(stereo, cfg['sr'], cfg['duration'])
+    stereo = maybe_normalise_loudness(
+        stereo,
+        sr=cfg['sr'],
+        loudness_norm=cfg.get("loudness_norm", "none"),
+        target_lufs=float(cfg.get("target_lufs", -23.0)),
+        peak_limit=float(cfg.get("loudness_peak_limit", 0.99)),
+    )
     n_fft, hop, win_length = calc_fft_hop(cfg['sr'], cfg['win_ms'], cfg['hop_ms'])
 
     mel = mel_stereo2_from_stereo(
@@ -131,6 +144,13 @@ def load_and_preprocess_cqt(path, cfg, n_bins: Optional[int] = None, bins_per_oc
     p = Path(path)
     stereo = load_audio_stereo(p, target_sr=cfg['sr'])
     stereo = ensure_duration(stereo, cfg['sr'], cfg['duration'])
+    stereo = maybe_normalise_loudness(
+        stereo,
+        sr=cfg['sr'],
+        loudness_norm=cfg.get("loudness_norm", "none"),
+        target_lufs=float(cfg.get("target_lufs", -23.0)),
+        peak_limit=float(cfg.get("loudness_peak_limit", 0.99)),
+    )
 
     hop_length = int(round(cfg['sr'] * (cfg['hop_ms'] / 1000.0)))
     n_bins = int(n_bins or cfg.get("n_mels", 128))
@@ -153,6 +173,13 @@ def load_and_preprocess_mel_cqt(path, cfg, n_bins: Optional[int] = None, bins_pe
 
     stereo = load_audio_stereo(p, target_sr=cfg['sr'])
     stereo = ensure_duration(stereo, cfg['sr'], cfg['duration'])
+    stereo = maybe_normalise_loudness(
+        stereo,
+        sr=cfg['sr'],
+        loudness_norm=cfg.get("loudness_norm", "none"),
+        target_lufs=float(cfg.get("target_lufs", -23.0)),
+        peak_limit=float(cfg.get("loudness_peak_limit", 0.99)),
+    )
 
     n_fft, hop, win_length = calc_fft_hop(cfg['sr'], cfg['win_ms'], cfg['hop_ms'])
     mel = mel_stereo2_from_stereo(
@@ -191,20 +218,19 @@ def _merge_mel_cqt(mel: np.ndarray, cqt: np.ndarray) -> torch.Tensor:
     mel_tensor = mel_tensor[:, :min_h, :min_w]
     cqt_tensor = cqt_tensor[:, :min_h, :min_w]
 
-    # Per-example Z-score
-    mel_tensor = (mel_tensor - mel_tensor.mean()) / (mel_tensor.std() + 1e-6)
-    cqt_tensor = (cqt_tensor - cqt_tensor.mean()) / (cqt_tensor.std() + 1e-6)
-
     return torch.cat([mel_tensor, cqt_tensor], dim=0)
 
 
-def get_prediction(model, mel_cqt, device):
-    """Returns prediction vector from a preprocessed mel+cqt tensor."""
+def get_prediction(model, features, device, task_mode: str = "multi_label"):
+    """Returns prediction vector from a preprocessed feature tensor."""
     model.eval()
     with torch.no_grad():
-        x = mel_cqt.unsqueeze(0).to(device)
+        x = features.unsqueeze(0).to(device)
         logits = model(x)
-        probs = torch.sigmoid(logits)
+        if task_mode == "single_label":
+            probs = torch.softmax(logits, dim=1)
+        else:
+            probs = torch.sigmoid(logits)
     return probs.cpu().numpy()[0]
 
 
@@ -223,6 +249,8 @@ def run_inference(
     show_progress: bool = True,
     cqt_bins: Optional[int] = None,
     bins_per_octave: int = 12,
+    feature_mode: str = "mel_cqt",
+    task_mode: str = "multi_label",
 ):
     """
     Loads checkpoint + model, runs inference over a manifest CSV.
@@ -292,6 +320,10 @@ def run_inference(
         iterator = tqdm(iterator, total=len(df))
 
     n_fail = 0
+    feature_mode = str(feature_mode).strip().lower()
+    if feature_mode not in {"cqt", "mel_cqt"}:
+        raise ValueError(f"Unsupported feature_mode: {feature_mode}")
+
     with torch.no_grad():
         for _, row in iterator:
             try:
@@ -313,7 +345,7 @@ def run_inference(
                 if "cqt_path" in row and str(row.get("cqt_path", "")).strip():
                     cqt = np.load(row["cqt_path"])
 
-                need_mel = mel is None
+                need_mel = (feature_mode == "mel_cqt") and (mel is None)
                 need_cqt = cqt is None
 
                 wav_path = row.get("wav_path", None) if "wav_path" in row else None
@@ -331,8 +363,11 @@ def run_inference(
                         wav_path, audio_cfg, n_bins=cqt_bins, bins_per_octave=bins_per_octave
                     )
 
-                mel_cqt = _merge_mel_cqt(mel, cqt)
-                probs = get_prediction(model, mel_cqt, device)
+                if feature_mode == "cqt":
+                    model_input = torch.from_numpy(cqt).float()
+                else:
+                    model_input = _merge_mel_cqt(mel, cqt)
+                probs = get_prediction(model, model_input, device, task_mode=task_mode)
 
             except Exception as exc:
                 n_fail += 1

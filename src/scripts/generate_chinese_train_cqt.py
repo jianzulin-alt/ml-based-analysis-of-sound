@@ -12,7 +12,7 @@ import pandas as pd
 import yaml
 from tqdm import tqdm
 
-from preprocessing import load_audio_stereo, ensure_duration
+from preprocessing import load_audio_stereo, ensure_duration, maybe_normalise_loudness
 from utils.safe_paths import guard_path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -97,10 +97,20 @@ def _process_one(
     win_ms: float,
     hop_ms: float,
     fmin: float,
+    loudness_norm: str,
+    target_lufs: float,
+    loudness_peak_limit: float,
 ):
     try:
         stereo = load_audio_stereo(wav_path, target_sr=sr)
         stereo = ensure_duration(stereo, sr, dur)
+        stereo = maybe_normalise_loudness(
+            stereo,
+            sr=sr,
+            loudness_norm=loudness_norm,
+            target_lufs=target_lufs,
+            peak_limit=loudness_peak_limit,
+        )
         hop_length = int(round(sr * (hop_ms / 1000.0)))
 
         cqt = _cqt_stereo2_from_stereo(
@@ -177,6 +187,9 @@ def main() -> None:
     fmin = float(audio_cfg["fmin"])
     fmax = audio_cfg.get("fmax")
     n_bins = int(args.n_bins or audio_cfg.get("n_mels", 128))
+    loudness_norm = str(audio_cfg.get("loudness_norm", "none"))
+    target_lufs = float(audio_cfg.get("target_lufs", -23.0))
+    loudness_peak_limit = float(audio_cfg.get("loudness_peak_limit", 0.99))
     if fmin <= 0:
         raise ValueError(f"fmin must be > 0 for CQT, got {fmin}")
     max_freq = float(fmax) if fmax else (sr / 2.0)
@@ -221,7 +234,19 @@ def main() -> None:
     if num_workers == 1:
         for idx, wav_path, label in tqdm(row_items, desc="Generating CQTs"):
             ok, out_path, label, wav_path, err = _process_one(
-                wav_path, label, cache_root, sr, dur, n_bins, args.bins_per_octave, win_ms, hop_ms, fmin
+                wav_path,
+                label,
+                cache_root,
+                sr,
+                dur,
+                n_bins,
+                args.bins_per_octave,
+                win_ms,
+                hop_ms,
+                fmin,
+                loudness_norm,
+                target_lufs,
+                loudness_peak_limit,
             )
             if ok:
                 rows_out[idx] = out_path.as_posix()
@@ -244,6 +269,9 @@ def main() -> None:
                     win_ms,
                     hop_ms,
                     fmin,
+                    loudness_norm,
+                    target_lufs,
+                    loudness_peak_limit,
                 ): idx
                 for idx, wav_path, label in row_items
             }

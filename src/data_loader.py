@@ -6,6 +6,14 @@ from typing import Optional
 from torch.utils.data import Dataset
 
 
+def normalise_spectrograms(spec: np.ndarray) -> np.ndarray:
+    """
+    Keep compatibility with callers that previously expected feature-level z-score.
+    Loudness normalisation is now handled pre-feature (waveform domain, e.g. LUFS).
+    """
+    return np.asarray(spec, dtype=np.float32)
+
+
 def _read_csv_with_fallback(path: Path) -> pd.DataFrame:
     encodings = ("utf-8", "utf-8-sig", "gbk", "cp936")
     last_err: Optional[UnicodeDecodeError] = None
@@ -86,11 +94,6 @@ class MultiLabelMelDataset(Dataset):
 
         mel = np.load(npy_path)
         mel_tensor = torch.from_numpy(mel).float()
-
-        # Per-example Z-score
-        mean = mel_tensor.mean()
-        std = mel_tensor.std() + 1e-6
-        mel_tensor = (mel_tensor - mean) / std
 
         if self.transform is not None:
             mel_tensor = self.transform(mel_tensor)

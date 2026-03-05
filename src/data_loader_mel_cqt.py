@@ -89,10 +89,6 @@ class MultiLabelMelCqtDataset(Dataset):
         mel_tensor = mel_tensor[:, :min_h, :min_w]
         cqt_tensor = cqt_tensor[:, :min_h, :min_w]
 
-        # Per-example Z-score
-        mel_tensor = (mel_tensor - mel_tensor.mean()) / (mel_tensor.std() + 1e-6)
-        cqt_tensor = (cqt_tensor - cqt_tensor.mean()) / (cqt_tensor.std() + 1e-6)
-
         if self.transform is not None:
             mel_tensor = self.transform(mel_tensor)
             cqt_tensor = self.transform(cqt_tensor)

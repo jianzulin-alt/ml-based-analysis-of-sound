@@ -6,6 +6,9 @@ audio:
   hop_ms: 10.0
   fmin: 20.0
   fmax: 20000.0
+  loudness_norm: "lufs"
+  target_lufs: -23.0
+  loudness_peak_limit: 0.99
 
 paths:
   train_dir: "data/audio/IRMAS/IRMAS-TrainingData/IRMAS-TrainingData"

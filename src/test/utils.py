@@ -6,7 +6,13 @@ from pathlib import Path
 from sklearn.metrics import classification_report, accuracy_score, hamming_loss
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from src.preprocessing import calc_fft_hop, ensure_duration, load_audio_stereo, mel_stereo2_from_stereo
+from src.preprocessing import (
+    calc_fft_hop,
+    ensure_duration,
+    load_audio_stereo,
+    mel_stereo2_from_stereo,
+    maybe_normalise_loudness,
+)
 
 
 def _read_csv_with_fallback(path: Path) -> pd.DataFrame:
@@ -56,6 +62,13 @@ def load_and_preprocess(path, cfg):
   
     stereo = load_audio_stereo(p, target_sr=cfg['sr'])
     stereo = ensure_duration(stereo, cfg['sr'], cfg['duration'])
+    stereo = maybe_normalise_loudness(
+        stereo,
+        sr=cfg['sr'],
+        loudness_norm=cfg.get("loudness_norm", "none"),
+        target_lufs=float(cfg.get("target_lufs", -23.0)),
+        peak_limit=float(cfg.get("loudness_peak_limit", 0.99)),
+    )
     n_fft, hop, win_length = calc_fft_hop(cfg['sr'], cfg['win_ms'], cfg['hop_ms'])
     
     mel = mel_stereo2_from_stereo(
@@ -65,16 +78,17 @@ def load_and_preprocess(path, cfg):
     )
     return torch.from_numpy(mel).float()
 
-def get_prediction(model, mel, device):
-    """Standardises input and returns prediction vector."""
+def get_prediction(model, mel, device, task_mode: str = "multi_label"):
+    """Runs model inference and returns prediction vector."""
     model.eval()
     with torch.no_grad():
         # Add batch dimension and move to device
         x = mel.unsqueeze(0).to(device)
-        # Match training normalisation
-        x = (x - x.mean()) / (x.std() + 1e-6)
         logits = model(x)
-        probs = torch.sigmoid(logits)
+        if task_mode == "single_label":
+            probs = torch.softmax(logits, dim=1)
+        else:
+            probs = torch.sigmoid(logits)
     return probs.cpu().numpy()[0]
 
 def find_best_threshold(preds_probs, gts, labels, show_plot=False):
@@ -158,6 +172,7 @@ def run_inference(
     classes_key: str = "classes",
     strict_load: bool = True,
     show_progress: bool = True,
+    task_mode: str = "multi_label",
 ):
     """
     Loads checkpoint + model, runs inference over a manifest CSV.
@@ -208,7 +223,7 @@ def run_inference(
             try:
                 gt_vec = parse_ground_truth(row["txt_path"], label_to_idx)
                 mel = load_and_preprocess(row["wav_path"], audio_cfg)
-                probs = get_prediction(model, mel, device)
+                probs = get_prediction(model, mel, device, task_mode=task_mode)
             except Exception as exc:
                 n_fail += 1
                 if n_fail <= 10:

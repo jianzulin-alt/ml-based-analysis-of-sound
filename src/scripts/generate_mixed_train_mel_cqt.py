@@ -21,6 +21,7 @@ from preprocessing import (
     ensure_duration,
     load_audio_stereo,
     mel_stereo2_from_stereo,
+    maybe_normalise_loudness,
     ensure_dir,
 )
 
@@ -86,9 +87,7 @@ def mix_stereo_waveforms(
         gain = (base_rms / (s_rms + 1e-12)) * (10 ** (-snr_db / 20.0))
         mix = mix + s * float(gain)
 
-    peak = float(np.max(np.abs(mix)) + 1e-12)
-    mix = (0.99 * mix / peak).astype(np.float32)
-    return mix
+    return mix.astype(np.float32, copy=False)
 
 
 def _cqt_stereo2_from_stereo(
@@ -185,6 +184,13 @@ def _mix_one(idx: int):
             stereos.append(stereo)
 
         mixed_stereo = mix_stereo_waveforms(stereos, snr_db_range=_G_SNR_RANGE)
+        mixed_stereo = maybe_normalise_loudness(
+            mixed_stereo,
+            sr=int(_G_AUDIO["sr"]),
+            loudness_norm=str(_G_AUDIO.get("loudness_norm", "none")),
+            target_lufs=float(_G_AUDIO.get("target_lufs", -23.0)),
+            peak_limit=float(_G_AUDIO.get("loudness_peak_limit", 0.99)),
+        )
 
         if _G_SAVE_WAVS and _G_WAV_OUT_DIR is not None and idx < _G_MAX_WAVS:
             labels_tag = "_".join(chosen_labels)
@@ -356,6 +362,9 @@ def main() -> None:
         "win_length": win_length,
         "mel_cache_root": mel_cache_root,
         "cqt_cache_root": cqt_cache_root,
+        "loudness_norm": str(audio_cfg.get("loudness_norm", "none")),
+        "target_lufs": float(audio_cfg.get("target_lufs", -23.0)),
+        "loudness_peak_limit": float(audio_cfg.get("loudness_peak_limit", 0.99)),
     }
 
     num_workers = max(1, int(args.num_workers or 1))

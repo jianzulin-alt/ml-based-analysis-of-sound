@@ -9,6 +9,10 @@ from typing import Tuple, Optional, List
 import librosa
 import numpy as np
 import soundfile as sf
+try:
+    import pyloudnorm as pyln
+except Exception:
+    pyln = None
 
 # Prefer resampy-backed kaiser_fast when available; otherwise fall back to scipy polyphase.
 _RESAMPLE_TYPE = "kaiser_fast" if importlib.util.find_spec("resampy") else "polyphase"
@@ -74,6 +78,70 @@ def ensure_duration(stereo: np.ndarray, sr: int, duration_s: float) -> np.ndarra
         padding = target - T
         return np.pad(stereo, ((0, 0), (0, padding)), mode='constant')
 
+
+def normalise_stereo_to_lufs(
+    stereo: np.ndarray,
+    sr: int,
+    target_lufs: float = -23.0,
+    peak_limit: float = 0.99,
+) -> np.ndarray:
+    """
+    LUFS-normalise a stereo waveform before feature extraction.
+    Input/Output shape: (2, T)
+    """
+    if pyln is None:
+        raise RuntimeError(
+            "pyloudnorm is required for LUFS normalisation. "
+            "Install it with: python -m pip install pyloudnorm"
+        )
+
+    x = np.asarray(stereo, dtype=np.float32)
+    if x.ndim != 2 or x.shape[0] != 2:
+        raise ValueError(f"Expected stereo shape (2, T), got {x.shape}")
+
+    # pyloudnorm expects shape (samples, channels)
+    x_tc = x.T
+    meter = pyln.Meter(sr)
+    try:
+        measured_lufs = meter.integrated_loudness(x_tc)
+    except Exception:
+        # If loudness cannot be measured (e.g. mostly silence), keep input as-is.
+        return x
+
+    if not np.isfinite(measured_lufs):
+        return x
+
+    gain_db = float(target_lufs) - float(measured_lufs)
+    gain = 10.0 ** (gain_db / 20.0)
+    y_tc = x_tc * gain
+
+    if peak_limit is not None and peak_limit > 0:
+        peak = float(np.max(np.abs(y_tc)) + 1e-12)
+        if peak > float(peak_limit):
+            y_tc = y_tc * (float(peak_limit) / peak)
+
+    return y_tc.T.astype(np.float32, copy=False)
+
+
+def maybe_normalise_loudness(
+    stereo: np.ndarray,
+    sr: int,
+    loudness_norm: str = "none",
+    target_lufs: float = -23.0,
+    peak_limit: float = 0.99,
+) -> np.ndarray:
+    mode = str(loudness_norm or "none").strip().lower()
+    if mode in {"none", "off", "false", "0"}:
+        return np.asarray(stereo, dtype=np.float32)
+    if mode == "lufs":
+        return normalise_stereo_to_lufs(
+            stereo=stereo,
+            sr=sr,
+            target_lufs=target_lufs,
+            peak_limit=peak_limit,
+        )
+    raise ValueError(f"Unsupported loudness_norm mode: {loudness_norm}")
+
 def mel_stereo2_from_stereo(stereo: np.ndarray, sr: int, n_fft: int, hop: int, win_length: int,
                             n_mels: int, fmin: float = 20.0, fmax: float | None = None) -> np.ndarray:
     """Compute Mel spectrogram for both channels."""
@@ -93,7 +161,10 @@ def mel_stereo2_from_stereo(stereo: np.ndarray, sr: int, n_fft: int, hop: int, w
 
 def precache_one(wav_path: Path, label: str, cache_root: Path,
                  sr: int, dur: float, n_mels: int, win_ms: float, hop_ms: float,
-                 fmin: float, fmax: Optional[float]) -> Path:
+                 fmin: float, fmax: Optional[float],
+                 loudness_norm: str = "none",
+                 target_lufs: float = -23.0,
+                 loudness_peak_limit: float = 0.99) -> Path:
     """
     Main pipeline function: Load WAV -> Compute Mel -> Save .npy
     Returns the path to the saved .npy file.
@@ -105,6 +176,15 @@ def precache_one(wav_path: Path, label: str, cache_root: Path,
     
     # 2. Fix Length
     stereo = ensure_duration(stereo, sr, dur)
+
+    # 2.5 Loudness normalisation (waveform-domain)
+    stereo = maybe_normalise_loudness(
+        stereo,
+        sr=sr,
+        loudness_norm=loudness_norm,
+        target_lufs=target_lufs,
+        peak_limit=loudness_peak_limit,
+    )
     
     # 3. Compute Mel
     mel = mel_stereo2_from_stereo(
@@ -116,7 +196,12 @@ def precache_one(wav_path: Path, label: str, cache_root: Path,
     # 4. Save
     stem = wav_path.stem
     # Include params in filename to invalidate cache if params change
-    tag  = f"sr{sr}_dur{dur}_m{n_mels}_w{int(win_ms)}_h{int(hop_ms)}"
+    ln_mode = str(loudness_norm or "none").strip().lower()
+    ln_tag = f"ln{ln_mode}"
+    if ln_mode == "lufs":
+        lu = str(float(target_lufs)).replace(".", "p").replace("-", "m")
+        ln_tag = f"{ln_tag}_lu{lu}"
+    tag = f"sr{sr}_dur{dur}_m{n_mels}_w{int(win_ms)}_h{int(hop_ms)}_{ln_tag}"
     fn   = f"{stem}__{_hash_path(str(wav_path))}__{tag}.npy"
     
     out_path = cache_root / label / fn
