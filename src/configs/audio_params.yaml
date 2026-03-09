@@ -12,3 +12,20 @@ paths:
   cache_root: "data/processed/log_mels"
   train_manifest: "data/processed/train_mels.csv"
   test_manifest: "data/test/a-touch-of-zen.csv"
+  mixed_cache_root: "data/processed/log_mels_mixed"
+  mixed_manifest: "data/processed/train_mels_mixed.csv"
+  mixed_wav_debug_dir: "data/processed/debug/mixed_wavs"
+
+mixing:
+  # Number of synthetic multi-label training examples to generate.
+  num_mixes: 12000
+  # Number of unique source labels per synthetic mix.
+  min_sources: 2
+  max_sources: 2
+  # Random SNR range (dB) used when scaling additional sources against the base source.
+  snr_db_min: -3.0
+  snr_db_max: 6.0
+  seed: 1337
+  # Save a small debug sample of mixed waveforms and sidecar label files.
+  save_wavs: true
+  max_wavs: 50

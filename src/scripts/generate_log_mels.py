@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Set, Tuple
 
 from tqdm import tqdm
-from preprocessing import precache_one
+from src.preprocessing import cache_logmel_npy
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -155,7 +155,7 @@ def main() -> None:
 
     for wav_path, label in tqdm(pairs, desc="Generating Mels"):
         try:
-            npy_path = precache_one(
+            npy_path = cache_logmel_npy(
                 wav_path,
                 label,
                 cache_root,

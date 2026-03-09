@@ -3,38 +3,44 @@
 Generate 2-channel mel-dB .npy tensors from IRMAS train audio and emit a manifest CSV.
 
 Two input modes:
-  A) --irmas_train_dir  (expected by Makefile target `irmas_train_mels`)
+  A) --irmas_train_dir (expected by Makefile target `irmas_train_mels`)
      Assumes structure: <irmas_train_dir>/<label>/**/*.wav
   B) --manifest_csv (legacy)
      CSV with columns: filepath,label pointing to raw WAVs.
 
-Output CSV columns: filepath,label  (filepath points to generated .npy)
+Output CSV columns: filepath,label (filepath points to generated .npy)
 """
-from __future__ import annotations
-import argparse, csv, sys, traceback
-from pathlib import Path
-from typing import Optional, List, Iterable, Tuple
 
-import numpy as np
+from __future__ import annotations
+
+import argparse
+import csv
+import sys
+import traceback
+from pathlib import Path
+from typing import Iterable, List, Tuple
+
 import pandas as pd
 
-# Import the EXACT helpers you already use
-from utils.mel_utils import (
-    # _hash_path,
-    # load_audio_stereo,
-    # ensure_duration,
-    # calc_fft_hop,
-    # mel_stereo2_from_stereo,
-    _safe_relpath,
-    precache_one,
-)
+from src.preprocessing import cache_logmel_npy
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 try:
     from tqdm import tqdm
 except Exception:
-    def tqdm(x, **kwargs): return x
+    def tqdm(x, **kwargs):  # type: ignore[misc]
+        return x
+
+
+def _safe_relpath(path: Path, root: Path) -> str:
+    path_resolved = path.resolve()
+    root_resolved = root.resolve()
+    try:
+        return path_resolved.relative_to(root_resolved).as_posix()
+    except ValueError:
+        return path_resolved.as_posix()
+
 
 def _iter_wavs_from_train_dir(root: Path) -> Iterable[Tuple[Path, str]]:
     """
@@ -43,32 +49,34 @@ def _iter_wavs_from_train_dir(root: Path) -> Iterable[Tuple[Path, str]]:
     """
     if not root.exists():
         raise FileNotFoundError(f"--irmas_train_dir not found: {root}")
-    # Accept both shallow and nested layouts: label is the direct parent folder
-    for wav in root.rglob("*"):
-        if wav.is_file():
-            label = wav.parent.name.strip().lower()
-            yield wav, label
+
+    for wav in root.rglob("*.wav"):
+        if not wav.is_file():
+            continue
+        label = wav.parent.name.strip().lower()
+        yield wav, label
 
 
 def _iter_wavs_from_manifest_csv(manifest_csv: Path) -> Iterable[Tuple[Path, str]]:
     if not manifest_csv.exists():
         raise FileNotFoundError(f"--manifest_csv not found: {manifest_csv}")
+
     df = pd.read_csv(manifest_csv)
     df = df.rename(columns={c: c.lower() for c in df.columns})
     if not {"filepath", "label"}.issubset(df.columns):
         raise ValueError("manifest must have columns: filepath,label")
+
     df["label"] = df["label"].astype(str).str.strip().str.lower()
     for _, row in df.iterrows():
         yield Path(row["filepath"]), str(row["label"])
 
-def main():
+
+def main() -> None:
     ap = argparse.ArgumentParser(
         description="Precompute 2ch mel-dB tensors (.npy) from IRMAS train audio and emit a new manifest."
     )
-    # Mode A (Makefile)
     ap.add_argument("--irmas_train_dir", type=str, help="Root of IRMAS train split; expects <label>/**/*.wav")
-    # Mode B (legacy)
-    ap.add_argument("--manifest_csv", type=str, help="CSV: filepath,label (paths to RAW WAVs).")
+    ap.add_argument("--manifest_csv", type=str, help="CSV: filepath,label (paths to raw WAVs).")
 
     ap.add_argument("--cache_root", required=True, type=str, help="Root folder for cached .npy.")
     ap.add_argument("--mel_manifest_out", required=True, type=str, help="Output CSV listing .npy paths and labels.")
@@ -77,7 +85,7 @@ def main():
     ap.add_argument("--batch_size", type=int, default=64)
     ap.add_argument("--workers", type=int, default=8)
 
-    # Mel params (must match your training pipeline)
+    # Mel params (must match training pipeline)
     ap.add_argument("--sr", type=int, default=44100)
     ap.add_argument("--dur", type=float, default=3.0)
     ap.add_argument("--n_mels", type=int, default=128)
@@ -88,11 +96,9 @@ def main():
 
     args = ap.parse_args()
 
-    cache_root   = Path(args.cache_root)
-    out_csv      = Path(args.mel_manifest_out)
+    cache_root = Path(args.cache_root)
+    out_csv = Path(args.mel_manifest_out)
 
-    # Decide input mode
-    mode = None
     if args.irmas_train_dir:
         mode = "train_dir"
         pairs_iter = list(_iter_wavs_from_train_dir(Path(args.irmas_train_dir)))
@@ -110,11 +116,18 @@ def main():
         try:
             if not wav_path.exists():
                 raise FileNotFoundError(str(wav_path))
-            npy_path = precache_one(
-                wav_path, label, cache_root,
-                sr=args.sr, dur=args.dur, n_mels=args.n_mels,
-                win_ms=args.win_ms, hop_ms=args.hop_ms,
-                fmin=args.fmin, fmax=args.fmax
+
+            npy_path = cache_logmel_npy(
+                wav_path=wav_path,
+                label=label,
+                cache_root=cache_root,
+                sr=args.sr,
+                dur=args.dur,
+                n_mels=args.n_mels,
+                win_ms=args.win_ms,
+                hop_ms=args.hop_ms,
+                fmin=args.fmin,
+                fmax=args.fmax,
             )
             rows_out.append([_safe_relpath(npy_path, PROJECT_ROOT), label])
             n_ok += 1

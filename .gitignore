@@ -16,6 +16,7 @@ data/test/IRMAS
 !data/test/a-touch-of-zen/
 !data/test/a-touch-of-zen/*
 !data/.gitkeep
+data/test/other
 
 # Ignore weights and logs
 *.pth

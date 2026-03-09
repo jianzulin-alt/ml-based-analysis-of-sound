@@ -1,6 +1,6 @@
 """
 preprocessing.py
-Shared utilities for audio processing and Mel-spectrogram computation.
+Shared utilities for audio processing for feature computation and caching
 """
 import hashlib
 import importlib.util
@@ -9,6 +9,7 @@ from typing import Tuple, Optional, List
 import librosa
 import numpy as np
 import soundfile as sf
+import torch
 
 # Prefer resampy-backed kaiser_fast when available; otherwise fall back to scipy polyphase.
 _RESAMPLE_TYPE = "kaiser_fast" if importlib.util.find_spec("resampy") else "polyphase"
@@ -21,17 +22,17 @@ def _hash_path(p: str) -> str:
     """Generate a short hash for a file path to prevent filename collisions."""
     return hashlib.md5(p.encode("utf-8")).hexdigest()[:10]
 
-def _next_pow2(n: int) -> int:
+def _next_power_of_two(n: int) -> int:
     return 1 << (n - 1).bit_length()
 
-def calc_fft_hop(sr: int, win_ms: float, hop_ms: float) -> Tuple[int, int, int]:
+def compute_stft_params(sr: int, win_ms: float, hop_ms: float) -> Tuple[int, int, int]:
     """Convert ms parameters to sample counts."""
     win_length = int(round(sr * (win_ms / 1000.0)))
     hop = int(round(sr * (hop_ms / 1000.0)))
-    n_fft = _next_pow2(win_length)
+    n_fft = _next_power_of_two(win_length)
     return n_fft, hop, win_length
 
-def load_audio_stereo(path: Path, target_sr: int) -> np.ndarray:
+def load_audio_as_stereo(path: Path, target_sr: int) -> np.ndarray:
     """
     Load audio, force stereo (2 channels), and resample if necessary.
     Returns: (2, Time) numpy array.
@@ -74,7 +75,7 @@ def ensure_duration(stereo: np.ndarray, sr: int, duration_s: float) -> np.ndarra
         padding = target - T
         return np.pad(stereo, ((0, 0), (0, padding)), mode='constant')
 
-def mel_stereo2_from_stereo(stereo: np.ndarray, sr: int, n_fft: int, hop: int, win_length: int,
+def stereo_to_logmel(stereo: np.ndarray, sr: int, n_fft: int, hop: int, win_length: int,
                             n_mels: int, fmin: float = 20.0, fmax: float | None = None) -> np.ndarray:
     """Compute Mel spectrogram for both channels."""
     fmax = fmax or (sr / 2)
@@ -91,23 +92,23 @@ def mel_stereo2_from_stereo(stereo: np.ndarray, sr: int, n_fft: int, hop: int, w
     
     return np.stack(feats, axis=0)  # Shape: (2, n_mels, Time)
 
-def precache_one(wav_path: Path, label: str, cache_root: Path,
+def cache_logmel_npy(wav_path: Path, label: str, cache_root: Path,
                  sr: int, dur: float, n_mels: int, win_ms: float, hop_ms: float,
                  fmin: float, fmax: Optional[float]) -> Path:
     """
     Main pipeline function: Load WAV -> Compute Mel -> Save .npy
     Returns the path to the saved .npy file.
     """
-    n_fft, hop, win_length = calc_fft_hop(sr, win_ms, hop_ms)
+    n_fft, hop, win_length = compute_stft_params(sr, win_ms, hop_ms)
     
     # 1. Load
-    stereo = load_audio_stereo(wav_path, target_sr=sr)
+    stereo = load_audio_as_stereo(wav_path, target_sr=sr)
     
     # 2. Fix Length
     stereo = ensure_duration(stereo, sr, dur)
     
     # 3. Compute Mel
-    mel = mel_stereo2_from_stereo(
+    mel = stereo_to_logmel(
         stereo, sr,
         n_fft=n_fft, hop=hop, win_length=win_length,
         n_mels=n_mels, fmin=fmin, fmax=fmax

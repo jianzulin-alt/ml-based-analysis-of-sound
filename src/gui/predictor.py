@@ -12,10 +12,10 @@ import torch
 from src.models import CNN
 from src.data_loader import normalise_spectrograms
 from src.preprocessing import (
-    calc_fft_hop,
+    compute_stft_params,
     ensure_duration,
-    load_audio_stereo,
-    mel_stereo2_from_stereo,
+    load_audio_as_stereo,
+    stereo_to_logmel,
 )
 
 def _select_device() -> torch.device:
@@ -63,7 +63,7 @@ class InstrumentClassifier:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Pre-compute FFT parameters
-        self._n_fft, self._hop_length, self._win_length = calc_fft_hop(
+        self._n_fft, self._hop_length, self._win_length = compute_stft_params(
             audio_config.sample_rate, audio_config.win_ms, audio_config.hop_ms
         )
 
@@ -133,7 +133,7 @@ class InstrumentClassifier:
         if chunk_samples <= 0 or stride_samples <= 0:
             raise ValueError("chunk_duration and stride must be positive.")
 
-        stereo = load_audio_stereo(Path(audio_path), cfg.sample_rate)
+        stereo = load_audio_as_stereo(Path(audio_path), cfg.sample_rate)
         total_samples = stereo.shape[1]
         if total_samples == 0:
             raise ValueError("Input audio appears to be empty.")
@@ -147,7 +147,7 @@ class InstrumentClassifier:
             if segment.shape[1] < chunk_samples:
                 segment = ensure_duration(segment, cfg.sample_rate, chunk_len)
 
-            mel = mel_stereo2_from_stereo(
+            mel = stereo_to_logmel(
                 segment,
                 cfg.sample_rate,
                 n_fft=self._n_fft,
@@ -217,9 +217,9 @@ class InstrumentClassifier:
 
     def _audio_to_mel(self, audio_path: Path, save: bool) -> Tuple[np.ndarray, Optional[Path]]:
         cfg = self.audio_config
-        stereo = load_audio_stereo(audio_path, cfg.sample_rate)
+        stereo = load_audio_as_stereo(audio_path, cfg.sample_rate)
         stereo = ensure_duration(stereo, cfg.sample_rate, cfg.clip_duration)
-        mel = mel_stereo2_from_stereo(
+        mel = stereo_to_logmel(
             stereo,
             cfg.sample_rate,
             n_fft=self._n_fft,

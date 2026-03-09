@@ -81,7 +81,7 @@ def main() -> None:
         dur = human_time(n * CLIP_SECONDS)
         
         # Display label, count, percentage, and duration
-        print(f"  {label.ljust(width)}  {str(n)}  ({pct:.1f}%)  ({dur})")
+        print(f"  {label.ljust(width)}  {str(n)}  ({pct:.1f}%)  ({dur}) ({n * CLIP_SECONDS}s)")
 
     print(f"\nTotal clip counts: {total}")
 

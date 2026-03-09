@@ -1,0 +1,22 @@
+{
+  "timestamp_utc": "2026-03-06T02:03:04.755352+00:00",
+  "run_name": "CNN_singlelabel_irmas_v1_quick",
+  "model_name": "cnn",
+  "pretrained": false,
+  "freeze_backbone_epochs": 0,
+  "epochs_trained": 5,
+  "best_epoch": 5,
+  "best_val_acc": 0.6361185983827493,
+  "best_val_macro_f1": 0.5934506179720028,
+  "final_val_acc": 0.6361185983827493,
+  "final_val_macro_f1": 0.5934506179720028,
+  "batch_size": 32,
+  "lr": 0.001,
+  "weight_decay": 0.0001,
+  "dropout": 0.5,
+  "val_frac": 0.2,
+  "seed": 1337,
+  "class_source": "manifest",
+  "manifests": "/Users/hughsignoriello/Developer/ml-based-analysis-of-sound/data/processed/train_mels.csv",
+  "ckpt_dir": "/Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/models/saved_weights/CNN_singlelabel_irmas_v1_quick"
+}
