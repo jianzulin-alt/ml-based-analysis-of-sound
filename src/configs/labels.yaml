@@ -18,15 +18,15 @@ train_labels:
 # Unused
 # - percussion
 
-irmas:
+irmas_labels:
   - cel
   - cla
   - flu
   - gac  
   - gel
   - org
+  - pia
   - sax
   - tru
   - vio
   - voi
-

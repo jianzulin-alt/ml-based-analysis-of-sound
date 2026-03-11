@@ -11,11 +11,11 @@ import torch
 
 from src.models import CNN
 from src.data_loader import normalise_spectrograms
-from src.preprocessing import (
+from src.preprocessing.features import (
     compute_stft_params,
     ensure_duration,
     load_audio_as_stereo,
-    stereo_to_logmel,
+    compute_stereo_logmel_db,
 )
 
 def _select_device() -> torch.device:
@@ -35,6 +35,7 @@ class AudioConfig:
     hop_ms: float = 10.0
     fmin: float = 20.0
     fmax: Optional[float] = None
+    window: str = "hann"
 
 
 class InstrumentClassifier:
@@ -147,7 +148,7 @@ class InstrumentClassifier:
             if segment.shape[1] < chunk_samples:
                 segment = ensure_duration(segment, cfg.sample_rate, chunk_len)
 
-            mel = stereo_to_logmel(
+            mel = compute_stereo_logmel_db(
                 segment,
                 cfg.sample_rate,
                 n_fft=self._n_fft,
@@ -156,6 +157,7 @@ class InstrumentClassifier:
                 n_mels=cfg.n_mels,
                 fmin=cfg.fmin,
                 fmax=cfg.fmax,
+                window=cfg.window,
             ).astype(np.float32, copy=False)
 
             mel_norm = normalise_spectrograms(mel).astype(np.float32, copy=False)
@@ -219,7 +221,7 @@ class InstrumentClassifier:
         cfg = self.audio_config
         stereo = load_audio_as_stereo(audio_path, cfg.sample_rate)
         stereo = ensure_duration(stereo, cfg.sample_rate, cfg.clip_duration)
-        mel = stereo_to_logmel(
+        mel = compute_stereo_logmel_db(
             stereo,
             cfg.sample_rate,
             n_fft=self._n_fft,
@@ -228,6 +230,7 @@ class InstrumentClassifier:
             n_mels=cfg.n_mels,
             fmin=cfg.fmin,
             fmax=cfg.fmax,
+            window=cfg.window,
         ).astype(np.float32, copy=False)
 
         mel_path = None
@@ -243,6 +246,7 @@ class InstrumentClassifier:
             f"_m{self.audio_config.n_mels}"
             f"_w{int(self.audio_config.win_ms)}"
             f"_h{int(self.audio_config.hop_ms)}"
+            f"_{self.audio_config.window}"
         )
         filename = f"{audio_path.stem}_{digest[:10]}__{tag}.npy"
         cache_path = self.cache_dir / filename

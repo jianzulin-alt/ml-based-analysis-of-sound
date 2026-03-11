@@ -7,11 +7,11 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from src.preprocessing import (
+from src.preprocessing.features import (
     compute_stft_params,
     ensure_duration,
     load_audio_as_stereo,
-    stereo_to_logmel,
+    compute_stereo_logmel_db,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -24,7 +24,7 @@ def load_and_preprocess(path: Path | str, cfg: dict) -> torch.Tensor:
     stereo = ensure_duration(stereo, cfg["sr"], cfg["duration"])
     n_fft, hop, win_length = compute_stft_params(cfg["sr"], cfg["win_ms"], cfg["hop_ms"])
 
-    mel = stereo_to_logmel(
+    mel = compute_stereo_logmel_db(
         stereo,
         cfg["sr"],
         n_fft=n_fft,
@@ -33,6 +33,7 @@ def load_and_preprocess(path: Path | str, cfg: dict) -> torch.Tensor:
         n_mels=cfg["n_mels"],
         fmin=cfg["fmin"],
         fmax=cfg.get("fmax"),
+        window=cfg.get("window", "hann"),
     )
     return torch.from_numpy(mel).float()
 
