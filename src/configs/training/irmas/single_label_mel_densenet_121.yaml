@@ -4,14 +4,14 @@ feature_mode: "mel"
 dataset: "irmas"
 
 model:
-  backbone: "densenet121"
+  backbone: "cnn_densenet_121"
   dropout: 0.3
   pretrained_weights: ""
 
 training:
   # DenseNet-121 is heavier than the baseline CNN, so use a smaller batch
   # size and a lower AdamW learning rate as a safer default.
-  epochs: 50
+  epochs: 100
   batch_size: 16
   learning_rate: 0.0003
   weight_decay: 0.0001

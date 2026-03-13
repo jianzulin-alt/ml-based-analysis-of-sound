@@ -14,8 +14,7 @@ from torch.utils.data import DataLoader, Subset, random_split
 from src.data_loader import UniversalAudioDataset
 from src.models.CNN import CNN
 from src.models.CNN_DenseNet_121 import CNN_DenseNet_121
-from src.train.trainer import AudioTrainer
-from src.train.utils import collate_fn_padd, get_device, load_checkpoint, seed_everything
+from src.train.trainer import AudioTrainer, collate_fn_padd, get_device, load_checkpoint, seed_everything
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -38,7 +37,7 @@ def load_yaml(path: Path) -> dict:
 
 def normalize_feature_mode(feature_mode: str) -> str:
     raw = str(feature_mode).strip().lower()
-    if raw not in {"mel", "cqt", "mel_cqt"}:
+    if raw not in {"mel", "cqt"}:
         raise ValueError(f"Unsupported feature_mode: {feature_mode}")
     return raw
 
@@ -122,13 +121,14 @@ def resolve_feature_manifests(
     """
     Returns (primary_manifest, cqt_manifest_if_needed).
     """
-    # Prefer mixed manifests for multi-label, fallback to regular manifests.
-    prefer_mixed = task_mode == "multi_label"
+    # Multi-label manifest preference is temporarily disabled.
+    # prefer_mixed = task_mode == "multi_label"
+    _ = task_mode
 
     if feature_mode == "mel":
         candidates = []
-        if prefer_mixed:
-            candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels_mixed", root))
+        # if prefer_mixed:
+        #     candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels_mixed", root))
         candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels", root))
         mel_path = _first_existing(candidates)
         if mel_path is None:
@@ -140,8 +140,8 @@ def resolve_feature_manifests(
 
     if feature_mode == "cqt":
         candidates = []
-        if prefer_mixed:
-            candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt_mixed", root))
+        # if prefer_mixed:
+        #     candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt_mixed", root))
         candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt", root))
         cqt_path = _first_existing(candidates)
         if cqt_path is None:
@@ -154,9 +154,9 @@ def resolve_feature_manifests(
     # mel_cqt
     mel_candidates = []
     cqt_candidates = []
-    if prefer_mixed:
-        mel_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels_mixed", root))
-        cqt_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt_mixed", root))
+    # if prefer_mixed:
+    #     mel_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels_mixed", root))
+    #     cqt_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt_mixed", root))
     mel_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels", root))
     cqt_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt", root))
 
@@ -225,8 +225,9 @@ def build_model(backbone: str, in_ch: int, num_classes: int, model_cfg: dict) ->
 
     if name == "cnn":
         return CNN(in_ch=in_ch, num_classes=num_classes, p_drop=dropout)
-    if name in {"densenet121", "cnn_densenet_121"}:
+    if name in {"cnn_densenet_121"}:
         return CNN_DenseNet_121(in_ch=in_ch, num_classes=num_classes, p_drop=dropout)
+    raise ValueError(f"Unsupported backbone: {backbone}")
 
 def load_pretrained_for_finetuning(
     model: nn.Module, pretrained_path: Path, current_num_classes: int, device: str
@@ -260,10 +261,15 @@ def write_history_csv(history: dict, out_path: Path) -> None:
                 row.append(vals[i] if i < len(vals) else "")
             writer.writerow(row)
 
+def count_model_parameters(model: nn.Module) -> Tuple[int, int]:
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return total, trainable
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="YAML-driven training entrypoint for single-label and multi-label audio models.",
+        description="YAML-driven training entrypoint for single-label audio models.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--config", default="src/configs/train_params.yaml", help="Training run config YAML.")
@@ -293,8 +299,10 @@ def main() -> None:
 
     experiment_name = str(config.get("experiment_name", "exp")).strip()
     task_mode = str(config.get("task_mode", "single_label")).strip().lower()
-    if task_mode not in {"single_label", "multi_label"}:
-        raise ValueError(f"Unsupported task_mode: {task_mode}")
+    # if task_mode not in {"single_label", "multi_label"}:
+    #     raise ValueError(f"Unsupported task_mode: {task_mode}")
+    if task_mode != "single_label":
+        raise ValueError("Only task_mode='single_label' is currently supported.")
     feature_mode = normalize_feature_mode(config.get("feature_mode", "mel"))
     dataset_name = str(config.get("dataset", "irmas")).strip()
     model_cfg = config.get("model", {}) or {}
@@ -307,6 +315,12 @@ def main() -> None:
 
     classes = choose_classes(labels_cfg, dataset_name)
     n_classes = len(classes)
+
+    print("=" * 88)
+    print("Training run setup")
+    print(f"Experiment: {experiment_name}")
+    print(f"Task mode: {task_mode} | Feature mode: {feature_mode} | Dataset: {dataset_name}")
+    print(f"Configs: train={train_cfg_path} | audio={audio_cfg_path} | labels={labels_cfg_path}")
     print(f"Classes ({n_classes}): {', '.join(classes)}")
 
     default_out = root / "src" / "models" / "saved_weights" / experiment_name
@@ -408,10 +422,25 @@ def main() -> None:
 
     train_loader = DataLoader(train_ds, shuffle=True, **loader_kwargs)
     val_loader = DataLoader(val_ds, shuffle=False, **loader_kwargs)
+    print(
+        "Dataloaders: "
+        f"batch_size={batch_size} | num_workers={num_workers} | pad_collate={use_padding_collate} | "
+        f"train_batches={len(train_loader)} | val_batches={len(val_loader)}"
+    )
 
     in_ch = 4 if feature_mode == "mel_cqt" else 2
     backbone = model_cfg.get("backbone", "cnn")
     model = build_model(backbone=backbone, in_ch=in_ch, num_classes=n_classes, model_cfg=model_cfg).to(device)
+    model_total_params, model_trainable_params = count_model_parameters(model)
+    print(
+        "Model: "
+        f"backbone={str(backbone).strip().lower()} | in_ch={in_ch} | num_classes={n_classes} | "
+        f"dropout={float(model_cfg.get('dropout', 0.3))}"
+    )
+    print(
+        "Model params: "
+        f"total={model_total_params:,} | trainable={model_trainable_params:,}"
+    )
 
     pretrained_weights = str(model_cfg.get("pretrained_weights", "")).strip()
     if args.resume and pretrained_weights:
@@ -440,6 +469,13 @@ def main() -> None:
         factor=0.5,
         patience=max(1, patience // 3),
     )
+    scheduler_patience = max(1, patience // 3)
+    print(
+        "Optimisation: "
+        f"optimizer=AdamW(lr={lr}, weight_decay={weight_decay}) | "
+        f"scheduler=ReduceLROnPlateau(mode=min, factor=0.5, patience={scheduler_patience}) | "
+        f"early_stop_patience={patience}"
+    )
 
     runtime_cfg = dict(config)
     runtime_cfg["task_mode"] = task_mode
@@ -456,6 +492,7 @@ def main() -> None:
     }
     with open(run_dir / "run_config.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump(runtime_cfg, f, sort_keys=False)
+    print(f"Resolved runtime config written to: {run_dir / 'run_config.yaml'}")
 
     start_epoch = 1
     history = None
@@ -484,8 +521,17 @@ def main() -> None:
             epochs_no_improve = infer_epochs_no_improve(history, best_val_loss)
         print(
             f"Resume state restored: checkpoint epoch={last_epoch}, "
-            f"continuing at epoch={start_epoch}"
+            f"continuing at epoch={start_epoch} | "
+            f"best_val_loss={best_val_loss:.6f} | epochs_no_improve={epochs_no_improve}"
         )
+
+    configured_epochs = int(tr_cfg.get("epochs", 50))
+    print(
+        "Training plan: "
+        f"start_epoch={start_epoch} | configured_epochs={configured_epochs} | "
+        f"max_new_epochs={max(0, configured_epochs - start_epoch + 1)} | output_dir={run_dir}"
+    )
+    print("=" * 88)
 
     trainer = AudioTrainer(
         model=model,

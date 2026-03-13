@@ -29,12 +29,12 @@ def compute_single_label_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict
     }
 
 
+"""
 def compute_multi_label_metrics(
     y_true: np.ndarray, y_prob: np.ndarray, threshold: float = 0.5
 ) -> Dict[str, float]:
-    """
-    Compute multi-label classification metrics from probabilities.
-    """
+    # Compute multi-label classification metrics from probabilities.
+ 
     if y_true.size == 0:
         return {
             "hamming_acc": 0.0,
@@ -56,3 +56,4 @@ def compute_multi_label_metrics(
         "macro_f1": _safe_metric(macro_f1),
         "micro_f1": _safe_metric(micro_f1),
     }
+"""

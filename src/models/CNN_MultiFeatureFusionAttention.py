@@ -345,10 +345,6 @@ class MultiFeatureFusionAttentionCNNLogits(nn.Module):
 
     Use this version with nn.CrossEntropyLoss.
 
-    Why include this:
-        Some papers mention Softmax or LogSoftmax in the architecture diagram,
-        but in practical PyTorch training you usually want raw logits when using
-        CrossEntropyLoss.
     """
 
     def __init__(self, config: ModelConfig) -> None:

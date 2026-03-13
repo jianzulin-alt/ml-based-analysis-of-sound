@@ -36,7 +36,7 @@ from src.preprocessing.features import (
     compute_stereo_cqt_db
 )
 
-FEATURE_CHOICES = ("mel", "cqt", "mel_cqt")
+FEATURE_CHOICES = ("mel", "cqt")
 
 
 def parse_dataset(dataset_dir: Path):
@@ -121,7 +121,7 @@ def _process_one(wav_path: Path, label: str, cache_root: Path, audio_cfg: dict, 
     1. Loads and resamples audio.
     2. Enforces duration (padding/cropping).
     3. Normalises loudness (LUFS).
-    4. Computes Mel and/or CQT.
+    4. Computes the selected feature family (Mel or CQT).
     5. Saves to disk with a collision-resistant hash.
     """
     try:
@@ -150,7 +150,7 @@ def _process_one(wav_path: Path, label: str, cache_root: Path, audio_cfg: dict, 
         # --- Stage 2: Feature Extraction ---
         
         # Log-Mel Extraction
-        if feature_type in {"mel", "mel_cqt"}:
+        if feature_type == "mel":
             mel = compute_stereo_logmel_db(
                 stereo, sr, n_fft=n_fft, hop=hop, win_length=win_length,
                 n_mels=audio_cfg["n_mels"], fmin=audio_cfg["fmin"], fmax=audio_cfg["fmax"],
@@ -166,7 +166,7 @@ def _process_one(wav_path: Path, label: str, cache_root: Path, audio_cfg: dict, 
             results["mel_path"] = mel_out
 
         # CQT Extraction
-        if feature_type in {"cqt", "mel_cqt"}:
+        if feature_type == "cqt":
             cqt = compute_stereo_cqt_db(
                 stereo, sr, n_bins=audio_cfg["n_bins"], 
                 bins_per_octave=audio_cfg["bins_per_octave"], 
@@ -187,11 +187,11 @@ def _process_one(wav_path: Path, label: str, cache_root: Path, audio_cfg: dict, 
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Extract Mel and/or CQT features from a configured dataset.",
+        description="Extract Mel or CQT features from a configured dataset.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  .venv/bin/python src/scripts/extract_features.py --dataset irmas --feature mel_cqt\n"
+            "  .venv/bin/python src/scripts/extract_features.py --dataset irmas --feature cqt\n"
             "  .venv/bin/python src/scripts/extract_features.py --dataset chinese_instruments --feature mel --num_workers 8\n"
         ),
     )
@@ -200,7 +200,7 @@ def main():
     ap.add_argument(
         "--feature",
         required=True,
-        help="Feature family: mel | cqt | mel_cqt ",
+        help="Feature family: mel | cqt ",
     )
     ap.add_argument("--num_workers", type=int, default=12, help="Parallel worker processes.")
     ap.add_argument(
@@ -230,7 +230,7 @@ def main():
     allowed_labels = load_allowed_labels(labels_config, args.dataset, args.label_key)
 
     # Guard CQT settings so librosa.cqt does not exceed Nyquist.
-    if args.feature in {"cqt", "mel_cqt"}:
+    if args.feature == "cqt":
         sr = int(audio_cfg["sr"])
         fmin = float(audio_cfg["fmin"])
         bins_per_octave = int(audio_cfg["bins_per_octave"])

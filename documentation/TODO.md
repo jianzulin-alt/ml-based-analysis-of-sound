@@ -1,24 +1,18 @@
 ### TASKS
 
-# Train
-- [ ] Store preprocesisng parameters in train models?
-
-
-
-
 ## other
 
-- Resolve all TODOs
-- Visualise mixing
-- Visualise chinese instruments
+- [ ] Visualise chinese instruments features
 
 ## training 
+
 - Onboard Jianzu for model training
-- Interface dataloader with feature extraction pipeline
-- Single class trainign
-- multi class trainign
 - fine tune trainign
 - testing pipeline uses same params and functions
+
+## Testing
+- [ ] Test models on IRMAS test set
+- [ ] Test on a touch of zen test set
 
 ## Tests
 
