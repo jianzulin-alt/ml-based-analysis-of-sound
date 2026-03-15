@@ -1,8 +1,14 @@
-### TASKS
+# TODO
 
 ## other
 
-- [ ] Visualise chinese instruments features
+- [x] Visualise chinese instruments features
+
+## Dataset
+- [ ] Add voice and other relevant classes
+- [ ] Write a script to analyse chinsese dataset and log all elemetns that are silent (delete them)
+- [ ] 
+
 
 ## training 
 
@@ -10,9 +16,11 @@
 - fine tune trainign
 - testing pipeline uses same params and functions
 
+
 ## Testing
-- [ ] Test models on IRMAS test set
-- [ ] Test on a touch of zen test set
+
+- [x] Test models on IRMAS test set
+- [x] Test on a touch of zen test set
 
 ## Tests
 

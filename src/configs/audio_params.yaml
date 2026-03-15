@@ -10,7 +10,7 @@ audio:
   fmin: 20.0
   fmax: 20000.0
   window: "hann"
-  loudness_norm: "lufs"  # Options: "none", "lufs"
+  loudness_norm: "none"  # Options: "none", "lufs"
   target_lufs: -23.0
   loudness_peak_limit: 0.99
 

@@ -2,6 +2,21 @@ experiment_name: chinese_single_label_mel_cnn_ft_irmas
 task_mode: single_label
 feature_mode: mel
 dataset: chinese_instruments
+classes:
+  - strings
+  - brass
+  - woodwind
+  - sheng
+  - dizi
+  - timpani
+  - erhu
+  - pipa
+  - suona
+  - guzheng
+  - piano
+  - guqin
+  - xiao
+  - yangqin
 model:
   backbone: cnn
   dropout: 0.3
@@ -17,10 +32,10 @@ training:
   seed: 1337
   mixed_precision: true
 resolved:
-  train_config: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/configs/training/chinese_instruments/single_label_mel_cnn.yaml
-  audio_config: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/configs/audio_params.yaml
-  labels_config: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/configs/labels.yaml
-  primary_manifest: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/data/processed/chinese_instruments_train_mels.csv
+  train_config: src/configs/training/chinese_instruments/single_label_mel_cnn.yaml
+  audio_config: src/configs/audio_params.yaml
+  labels_config: src/configs/labels.yaml
+  primary_manifest: data/processed/chinese_instruments_train_mels.csv
   cqt_manifest: ''
-  run_dir: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/models/saved_weights/chinese_single_label_mel_cnn_ft_irmas
+  run_dir: src/models/saved_weights/chinese_single_label_mel_cnn_ft_irmas
   resume_checkpoint: ''

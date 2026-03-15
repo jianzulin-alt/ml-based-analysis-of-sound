@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -33,6 +34,10 @@ def resolve_path(path_like: str | Path, root: Path) -> Path:
 def load_yaml(path: Path) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+def relative_to_root(path: Path, root: Path) -> str:
+    return Path(os.path.relpath(path.resolve(), root)).as_posix()
 
 
 def normalize_feature_mode(feature_mode: str) -> str:
@@ -481,14 +486,15 @@ def main() -> None:
     runtime_cfg["task_mode"] = task_mode
     runtime_cfg["feature_mode"] = feature_mode
     runtime_cfg["dataset"] = dataset_name
+    runtime_cfg["classes"] = classes
     runtime_cfg["resolved"] = {
-        "train_config": str(train_cfg_path),
-        "audio_config": str(audio_cfg_path),
-        "labels_config": str(labels_cfg_path),
-        "primary_manifest": str(primary_manifest),
-        "cqt_manifest": str(cqt_manifest) if cqt_manifest else "",
-        "run_dir": str(run_dir),
-        "resume_checkpoint": str(resume_checkpoint) if args.resume else "",
+        "train_config": relative_to_root(train_cfg_path, root),
+        "audio_config": relative_to_root(audio_cfg_path, root),
+        "labels_config": relative_to_root(labels_cfg_path, root),
+        "primary_manifest": relative_to_root(primary_manifest, root),
+        "cqt_manifest": relative_to_root(cqt_manifest, root) if cqt_manifest else "",
+        "run_dir": relative_to_root(run_dir, root),
+        "resume_checkpoint": relative_to_root(resume_checkpoint, root) if args.resume else "",
     }
     with open(run_dir / "run_config.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump(runtime_cfg, f, sort_keys=False)

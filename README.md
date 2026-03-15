@@ -66,4 +66,6 @@ Download from teams and place in `data/train`
 
  [Dataset](data/README.md) 
 
+ [Training Log](src/train/training_log.md)
+
 

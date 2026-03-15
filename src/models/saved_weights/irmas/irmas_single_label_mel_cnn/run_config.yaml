@@ -2,6 +2,18 @@ experiment_name: irmas_single_label_mel
 task_mode: single_label
 feature_mode: mel
 dataset: irmas
+classes:
+  - cel
+  - cla
+  - flu
+  - gac
+  - gel
+  - org
+  - pia
+  - sax
+  - tru
+  - vio
+  - voi
 model:
   backbone: cnn
   dropout: 0.3
@@ -17,10 +29,10 @@ training:
   seed: 1337
   mixed_precision: true
 resolved:
-  train_config: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/configs/training/irmas/single_label_mel.yaml
-  audio_config: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/configs/audio_params.yaml
-  labels_config: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/configs/labels.yaml
-  primary_manifest: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/data/processed/irmas_train_mels.csv
+  train_config: src/configs/training/irmas/single_label_mel.yaml
+  audio_config: src/configs/audio_params.yaml
+  labels_config: src/configs/labels.yaml
+  primary_manifest: data/processed/irmas_train_mels.csv
   cqt_manifest: ''
-  run_dir: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/models/saved_weights/irmas_single_label_mel
-  resume_checkpoint: /Users/hughsignoriello/Developer/ml-based-analysis-of-sound/src/models/saved_weights/irmas_single_label_mel/last.pt
+  run_dir: src/models/saved_weights/irmas/irmas_single_label_mel_cnn
+  resume_checkpoint: src/models/saved_weights/irmas/irmas_single_label_mel_cnn/last.pt

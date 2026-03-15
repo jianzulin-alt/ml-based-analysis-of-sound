@@ -1,0 +1,38 @@
+experiment_name: irmas_single_label_mel_densenet_121
+task_mode: single_label
+feature_mode: mel
+dataset: irmas
+model:
+  backbone: cnn_densenet_121
+  dropout: 0.3
+  pretrained_weights: ''
+training:
+  epochs: 100
+  batch_size: 16
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  val_frac: 0.2
+  patience: 12
+  num_workers: 8
+  seed: 1337
+  mixed_precision: true
+classes:
+- cel
+- cla
+- flu
+- gac
+- gel
+- org
+- pia
+- sax
+- tru
+- vio
+- voi
+resolved:
+  train_config: src/configs/training/irmas/mel_densenet_121.yaml
+  audio_config: src/configs/audio_params.yaml
+  labels_config: src/configs/labels.yaml
+  primary_manifest: data/processed/irmas_train_mels.csv
+  cqt_manifest: ''
+  run_dir: src/models/saved_weights/irmas_single_label_mel_densenet_121
+  resume_checkpoint: src/models/saved_weights/irmas_single_label_mel_densenet_121/last.pt
