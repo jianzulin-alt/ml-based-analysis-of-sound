@@ -5,6 +5,9 @@ __pycache__/
 archive/
 development/
 
+# experiments
+src/models/saved_weights/experiments
+
 # --- Audio & Features (The "Big" Stuff) ---
 # We ignore all contents of data, but keep the directory
 data/*
@@ -16,6 +19,7 @@ data/test/IRMAS
 !data/test/a-touch-of-zen/
 !data/test/a-touch-of-zen/*
 !data/.gitkeep
+data/test/other
 
 # Ignore weights and logs
 *.pth

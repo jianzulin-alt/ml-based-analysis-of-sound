@@ -1,8 +1,10 @@
-# ML_based_analysis_of_sound
+﻿# ML_based_analysis_of_sound
 
 ## Machine Learning-Based Analysis of Music and Sound in Martial Arts Films
 
 [Project tasks](https://github.com/users/hughmancoder/projects/4)
+
+
 
 ## Setup
 
@@ -22,31 +24,48 @@ source .venv/bin/activate
 # On Windows (PowerShell)
 . .venv\Scripts\Activate.ps1
 
-# Install dependencies
-pip install -r requirements.txt
+# Upgrade pip tooling (recommended)
+python -m pip install --upgrade pip setuptools wheel
+
+# Install base project dependencies
+python -m pip install -r requirements.txt
+
+# Install the local package for module-style imports in notebooks/scripts
+pip install -e .
+
+# If your environment blocks network during build isolation:
+# pip install -e . --no-build-isolation
 ```
+Activate environment (venv) on every terminal session
 
-Activate environment (venv) on every terminal
+## Setup dataset
 
-## Run the project
 
-refer to the make file for command lines
+**Film Dataset**
 
-```bash
-make help
-```
+Add the film test dataset here: `data/test/a-touch-of-zen`
 
-### Launch the Gradio interface
+**IRMAS dataset (Pretraining)**
 
-After installing dependencies, start the inference GUI with:
+Download IRMAS train and test datasets and add it here: `data/IRMAS`.
 
-```bash
-make run_gradio_gui
-```
+**Train Dataset**
 
-This launches the two-tab Gradio app (Model + Info) using the fine-tuned weights at `saved_weights/chinese_single_class/train_1/best_val_acc.pt` by default. Upload or record a ~3 second clip, inspect the generated mel spectrogram, and review the predicted class
-probabilities in the browser.
+Download from teams and place in `data/train`
 
-## Datasets
 
-Refer to data README.md [here](data/README.md) for details on datasets
+
+## Setup Dataset
+
+
+## Documentation
+
+[Generate Features](documentation/makefile.md)
+
+[Train Models](documentation/training.md)
+
+ [Dataset](data/README.md) 
+
+ [Training Log](src/train/training_log.md)
+
+

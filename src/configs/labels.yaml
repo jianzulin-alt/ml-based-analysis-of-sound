@@ -2,7 +2,6 @@
 train_labels:
   - strings
   - brass
-  - percussion
   - woodwind
   - sheng
   - dizi
@@ -16,15 +15,18 @@ train_labels:
   - xiao
   - yangqin
 
-irmas:
+# Unused
+# - percussion
+
+irmas_labels:
   - cel
   - cla
   - flu
   - gac  
   - gel
   - org
+  - pia
   - sax
   - tru
   - vio
   - voi
-

@@ -6,19 +6,7 @@ Datasets for training and testing models belong in this directory
 
 To summarise the dataset distribution run the following script: `data/scripts/summarise_data.py`
 
-**Manual Dataset Generation**: 
-
-To generate the dataset from raw audio sources, refer to the scripts in `data/scripts/generate_dataset.py`
-
-## Test Data
-
-Film test dataset: `data/test/a-touch-of-zen`
-
-IRMAS test dataset: `data/test/IRMAS`. Download IRMAS test dataset and place in this directory
-
-## Train Dataset 
-
-Download from teams and place in `data/train`
+To generate the dataset from raw audio sources, refer to the scripts in `data/scripts/generate_dataset.py` (Optional)
 
 **Dataset summary**
 
@@ -41,13 +29,6 @@ Download from teams and place in `data/train`
 
 Total clip counts: 8281
   ```
-
-### Suggestions
-
-- Horn (7)	Brass	Shares similar harmonic series and attack.
-- Bass (5)	Strings	Assuming this is a Double Bass or Cello.
-- Banzi Clapper (11)	Percussion	Distinct, but could go in "Percussion" 
-- Electronic (5)	New Class?	If you have 15m of Piano, consider replacing 5m with Synth/Electronic.
 
 ## A touch of zen test dataset
 
@@ -97,4 +78,3 @@ Unzip from teams and place in `data/train`
   xiao_zen_like                   1    (0.3%)
   yangqin                         1    (0.3%)
 ```
-

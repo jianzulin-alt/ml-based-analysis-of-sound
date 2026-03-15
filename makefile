@@ -1,59 +1,45 @@
-VENV_PY := $(firstword $(wildcard .venv/bin/python) $(wildcard .venv/Scripts/python.exe))
-PY ?= $(if $(VENV_PY),$(VENV_PY),python)
-
-PY_SRC := PYTHONPATH=src $(PY)
-PROCESSED_ROOT := data/processed
-CONFIG_FILE := src/configs/audio_params.yaml
+PY := .venv/bin/python
+CONFIG := src/configs/audio_params.yaml
 LABELS_CONFIG := src/configs/labels.yaml
+# FEATURE options: mel | cqt 
+FEATURE ?= mel
+WORKERS ?= 12
+# DATASET options: irmas | chinese_instruments
+DATASET ?= irmas
+MIX_DATASET ?= chinese_instruments
+MIX_FEATURE ?= mel
+MIX_WORKERS ?= 8
+ALL_DATASETS := irmas chinese_instruments
+ALL_FEATURES := mel cqt
 
-# Mix train mels and gennerate spectrogram
-NUM_MIXES ?= 20000
-MIN_SOURCES ?= 2
-MAX_SOURCES ?= 2
-SNR_DB_MIN ?= -3
-SNR_DB_MAX ?= 6
-NUM_MIXES ?= 12000 # start with ~150% of dataset size
+.PHONY: extract extract-help irmas chinese all mix clean
 
-MIXED_CACHE_ROOT := $(PROCESSED_ROOT)/log_mels_mixed
-MIXED_MANIFEST := $(PROCESSED_ROOT)/train_mels_mixed.csv
-TRAIN_DIR := data/train
 
-# NOTE: premixing will be replaced with mixing at train time to save storage
-generate_mixed_train_mels:
-	$(PY_SRC) src/scripts/generate_mixed_train_mels.py \
-		--config $(CONFIG_FILE) \
-		--labels_file $(LABELS_CONFIG) \
-		--train_dir $(TRAIN_DIR) \
-		--out_cache_root $(MIXED_CACHE_ROOT) \
-		--out_manifest $(MIXED_MANIFEST) \
-		--num_mixes $(NUM_MIXES) \
-		--save_wavs \
-		--wav_out_dir $(PROCESSED_ROOT)/debug/mixed_wavs \
-		--max_wavs 50
+extract:
+	$(PY) src/scripts/extract_features.py --config $(CONFIG) --dataset $(DATASET) --feature $(FEATURE) --num_workers $(WORKERS) --labels_config $(LABELS_CONFIG)
 
-generate_train_mels:
-	$(PY_SRC) src/scripts/generate_log_mels.py \
-		--config $(CONFIG_FILE) \
-		--labels_file $(LABELS_CONFIG)
+irmas:
+	$(MAKE) extract DATASET=$(DATASET) FEATURE=$(FEATURE) WORKERS=$(WORKERS)
 
-TEST_DIR_AZ := data/test/a-touch-of-zen
-TEST_MANIFEST_AZ := $(TEST_DIR_AZ).csv
-TEST_DIR_IRMAS := data/test/IRMAS/IRMAS-TestingData-Part1
-TEST_MANIFEST_IRMAS := $(TEST_DIR_IRMAS).csv
+chinese: DATASET := chinese_instruments
+chinese:
+	$(MAKE) extract DATASET=$(DATASET) FEATURE=$(FEATURE) WORKERS=$(WORKERS)
 
-generate_features: generate_train_mels generate_mixed_train_mels
+extract-help:
+	$(PY) src/scripts/extract_features.py --help
 
-test_manifest:
-	@echo "Creating test manifest..."
-	$(PY_SRC) src/scripts/generate_test_manifest.py \
-		--test_dir $(TEST_DIR) \
-		--out_csv $(OUT_CSV)
-
-test_manifest_az:
-	@$(MAKE) test_manifest TEST_DIR=$(TEST_DIR_AZ) OUT_CSV=$(TEST_MANIFEST_AZ)
-
-test_manifest_irmas:
-	@$(MAKE) test_manifest TEST_DIR=$(TEST_DIR_IRMAS) OUT_CSV=$(TEST_MANIFEST_IRMAS)
+# generate all features combinations for all datasets
+all:
+	@set -e; \
+	for ds in $(ALL_DATASETS); do \
+		for feat in $(ALL_FEATURES); do \
+			echo ">>> extracting dataset=$$ds feature=$$feat"; \
+			$(MAKE) extract DATASET=$$ds FEATURE=$$feat WORKERS=$(WORKERS); \
+		done; \
+	done
 
 clean:
-	rm -rf $(PROCESSED_ROOT)
+	rm -rf data/processed
+
+# mix:
+# 	$(PY) src/scripts/mix_and_extract.py --config $(CONFIG) --dataset $(MIX_DATASET) --feature $(MIX_FEATURE) --num_workers $(MIX_WORKERS) --labels_config $(LABELS_CONFIG) $(if $(MIX_NUM_MIXES),--num_mixes $(MIX_NUM_MIXES),) $(if $(MIX_SEED),--seed $(MIX_SEED),)

@@ -11,11 +11,11 @@ import torch
 
 from src.models import CNN
 from src.data_loader import normalise_spectrograms
-from src.preprocessing import (
-    calc_fft_hop,
+from src.preprocessing.features import (
+    compute_stft_params,
     ensure_duration,
-    load_audio_stereo,
-    mel_stereo2_from_stereo,
+    load_audio_as_stereo,
+    compute_stereo_logmel_db,
 )
 
 def _select_device() -> torch.device:
@@ -35,6 +35,7 @@ class AudioConfig:
     hop_ms: float = 10.0
     fmin: float = 20.0
     fmax: Optional[float] = None
+    window: str = "hann"
 
 
 class InstrumentClassifier:
@@ -63,7 +64,7 @@ class InstrumentClassifier:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Pre-compute FFT parameters
-        self._n_fft, self._hop_length, self._win_length = calc_fft_hop(
+        self._n_fft, self._hop_length, self._win_length = compute_stft_params(
             audio_config.sample_rate, audio_config.win_ms, audio_config.hop_ms
         )
 
@@ -133,7 +134,7 @@ class InstrumentClassifier:
         if chunk_samples <= 0 or stride_samples <= 0:
             raise ValueError("chunk_duration and stride must be positive.")
 
-        stereo = load_audio_stereo(Path(audio_path), cfg.sample_rate)
+        stereo = load_audio_as_stereo(Path(audio_path), cfg.sample_rate)
         total_samples = stereo.shape[1]
         if total_samples == 0:
             raise ValueError("Input audio appears to be empty.")
@@ -147,7 +148,7 @@ class InstrumentClassifier:
             if segment.shape[1] < chunk_samples:
                 segment = ensure_duration(segment, cfg.sample_rate, chunk_len)
 
-            mel = mel_stereo2_from_stereo(
+            mel = compute_stereo_logmel_db(
                 segment,
                 cfg.sample_rate,
                 n_fft=self._n_fft,
@@ -156,6 +157,7 @@ class InstrumentClassifier:
                 n_mels=cfg.n_mels,
                 fmin=cfg.fmin,
                 fmax=cfg.fmax,
+                window=cfg.window,
             ).astype(np.float32, copy=False)
 
             mel_norm = normalise_spectrograms(mel).astype(np.float32, copy=False)
@@ -217,9 +219,9 @@ class InstrumentClassifier:
 
     def _audio_to_mel(self, audio_path: Path, save: bool) -> Tuple[np.ndarray, Optional[Path]]:
         cfg = self.audio_config
-        stereo = load_audio_stereo(audio_path, cfg.sample_rate)
+        stereo = load_audio_as_stereo(audio_path, cfg.sample_rate)
         stereo = ensure_duration(stereo, cfg.sample_rate, cfg.clip_duration)
-        mel = mel_stereo2_from_stereo(
+        mel = compute_stereo_logmel_db(
             stereo,
             cfg.sample_rate,
             n_fft=self._n_fft,
@@ -228,6 +230,7 @@ class InstrumentClassifier:
             n_mels=cfg.n_mels,
             fmin=cfg.fmin,
             fmax=cfg.fmax,
+            window=cfg.window,
         ).astype(np.float32, copy=False)
 
         mel_path = None
@@ -243,6 +246,7 @@ class InstrumentClassifier:
             f"_m{self.audio_config.n_mels}"
             f"_w{int(self.audio_config.win_ms)}"
             f"_h{int(self.audio_config.hop_ms)}"
+            f"_{self.audio_config.window}"
         )
         filename = f"{audio_path.stem}_{digest[:10]}__{tag}.npy"
         cache_path = self.cache_dir / filename
