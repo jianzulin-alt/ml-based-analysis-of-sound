@@ -316,8 +316,9 @@ def save_checkpoint(payload: Dict[str, Any], filepath: Path) -> None:
     """Safely writes a checkpoint dictionary to disk."""
     filepath.parent.mkdir(parents=True, exist_ok=True)
     last_err: Exception | None = None
+    retryable_winerrors = {5, 32, 1224}
 
-    for attempt in range(5):
+    for attempt in range(10):
         tmp_path = filepath.with_name(f"{filepath.name}.tmp-{os.getpid()}-{attempt}")
         try:
             torch.save(payload, tmp_path)
@@ -332,17 +333,19 @@ def save_checkpoint(payload: Dict[str, Any], filepath: Path) -> None:
 
             message = str(exc).lower()
             retryable = (
-                getattr(exc, "winerror", None) == 1224
+                getattr(exc, "winerror", None) in retryable_winerrors
                 or "error code: 1224" in message
+                or "access is denied" in message
+                or "sharing violation" in message
                 or "user-mapped section open" in message
             )
-            if not retryable or attempt == 4:
+            if not retryable or attempt == 9:
                 raise
 
             wait_s = 0.5 * (attempt + 1)
             print(
                 f"[WARN] Checkpoint save blocked for {filepath.name}; "
-                f"retrying in {wait_s:.1f}s ({attempt + 1}/5)"
+                f"retrying in {wait_s:.1f}s ({attempt + 1}/10)"
             )
             time.sleep(wait_s)
 

@@ -1,8 +1,8 @@
-experiment_name: "chinese_single_label_mfcc_cqt_chroma_densenet_121"
+experiment_name: "irmas_single_label_mfcc_cqt_chroma_densenet_121"
 task_mode: "single_label"
 
 # dataset options: irmas | chinese_instruments
-dataset: "chinese_instruments"
+dataset: "irmas"
 
 # feature_mode options:
 #   mel | cqt | mfcc | chroma | mel_cqt | mel_chroma | mfcc_cqt_chroma

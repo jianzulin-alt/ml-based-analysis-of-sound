@@ -264,7 +264,6 @@ class OnTheFlyTestDataset(Dataset):
                     hop=self.hop,
                     win_length=self.win_length,
                     n_chroma=self.n_chroma,
-                    fmin=self.fmin,
                     window=self.window,
                 )
             ).float()
