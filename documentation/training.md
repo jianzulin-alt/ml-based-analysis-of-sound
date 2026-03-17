@@ -1,32 +1,68 @@
 # Training
 
-Run training with:
+The unified training entry is:
 
 ```bash
-python -m src.train.run_train --config <training-yaml>
+src/configs/train_params.yaml
+```
+
+Edit that file to choose:
+
+- dataset
+- feature combination
+- model backbone
+- optimiser/training parameters
+
+Then run training with either:
+
+```bash
+make train-dry
+make train
+```
+
+or directly:
+
+```bash
+python -m src.train.run_train --config src/configs/train_params.yaml
 ```
 
 ## Current support
 
 - `task_mode`: `single_label` only
-- `feature_mode`: `mel` or `cqt`
-- `model.backbone`: `cnn` or `cnn_densenet_121`
+- `feature_mode`:
+  - `mel`
+  - `cqt`
+  - `mfcc`
+  - `chroma`
+  - `mel_cqt`
+  - `mel_chroma`
+  - `mfcc_cqt_chroma`
+- `model.backbone`:
+  - `cnn`
+  - `cnn_densenet_121`
+  - `baseline_multifeature_cnn`
+  - `fusion_attention_cnn`
 
-## Required files
+## File layout
 
-- `src/configs/audio_params.yaml`
-- `src/configs/labels.yaml`
-- a training config under `src/configs/training/`
-
-Current presets in this repo:
-
-- `src/configs/training/irmas/mel_cnn.yaml`
-- `src/configs/training/irmas/mel_densenet_121.yaml`
-- `src/configs/training/chinese_instruments/single_label_mel_cnn.yaml`
-
-`run_train.py` defaults `--config` to `src/configs/train_params.yaml`, but that file is not present here, so pass `--config` explicitly.
+- Main editable training config:
+  - `src/configs/train_params.yaml`
+- Audio/data config:
+  - `src/configs/audio_params.yaml`
+- Labels config:
+  - `src/configs/labels.yaml`
+- Example presets:
+  - `src/configs/training/irmas/mel_cnn.yaml`
+  - `src/configs/training/irmas/mel_densenet_121.yaml`
+  - `src/configs/training/chinese_instruments/single_label_mel_cnn.yaml`
 
 ## CLI options
+
+```bash
+make train-dry TRAIN_CONFIG=src/configs/training/irmas/mel_cnn.yaml
+```
+
+Direct CLI equivalent:
 
 ```bash
 python -m src.train.run_train \
@@ -37,9 +73,17 @@ python -m src.train.run_train \
   --dry_run
 ```
 
-- `--output_dir`: override the run directory. Default is `src/models/saved_weights/<experiment_name>`
-- `--dry_run`: resolve configs, manifests, classes, and dataset, then exit
-- `--resume`: resume from `<run_dir>/last.pt` and `<run_dir>/split_indices.pt`
+Make variables:
+
+- `TRAIN_CONFIG`: training YAML to use. Default: `src/configs/train_params.yaml`
+- `TRAIN_OUTPUT_DIR`: optional output directory override
+
+Run targets:
+
+- `make train-dry`
+- `make train`
+- `make train-resume`
+- `make train-help`
 
 ## Resume
 
@@ -53,10 +97,9 @@ Required files:
 Example:
 
 ```bash
-python -m src.train.run_train \
-  --config src/configs/training/irmas/mel_densenet_121.yaml \
-  --output_dir src/models/saved_weights/irmas_single_label_mel_densenet_121 \
-  --resume
+make train-resume \
+  TRAIN_CONFIG=src/configs/training/irmas/mel_densenet_121.yaml \
+  TRAIN_OUTPUT_DIR=src/models/saved_weights/irmas_single_label_mel_densenet_121
 ```
 
 ## Fine-tuning

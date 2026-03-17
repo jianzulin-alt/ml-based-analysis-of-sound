@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Optional
 from torch.utils.data import Dataset
 
+from src.feature_modes import align_and_stack_feature_tensors, feature_mode_to_features, normalize_feature_mode
+
 def _read_csv_with_fallback(path: Path) -> pd.DataFrame:
     encodings = ("utf-8", "utf-8-sig", "gbk", "cp936")
     last_err: Optional[UnicodeDecodeError] = None
@@ -21,16 +23,18 @@ def _read_csv_with_fallback(path: Path) -> pd.DataFrame:
 class UniversalAudioDataset(Dataset):
     def __init__(
         self,
-        feature_mode: str,          # 'mel', 'cqt', or 'mel_cqt'
-        manifest_path: str | Path,  # Path to the Mel CSV (or CQT CSV if cqt mode)
+        feature_mode: str,
+        manifest_path: str | Path,
         class_names: list,
-        cqt_manifest_path: Optional[str | Path] = None, # Only required for 'mel_cqt'
+        cqt_manifest_path: Optional[str | Path] = None,
+        feature_manifest_paths: Optional[dict[str, str | Path]] = None,
         project_root: str = ".",
         transform=None,
         max_zero_label_warnings: int = 10,
         infer_label_from_parent: bool = True,
     ):
-        self.feature_mode = str(feature_mode).strip().lower()
+        self.feature_mode = normalize_feature_mode(feature_mode)
+        self.feature_names = feature_mode_to_features(self.feature_mode)
         self.root = Path(project_root)
         self.transform = transform
         self.infer_label_from_parent = infer_label_from_parent
@@ -39,15 +43,23 @@ class UniversalAudioDataset(Dataset):
         self.label_to_idx = {name: i for i, name in enumerate(self.class_names)}
         self.num_classes = len(self.class_names)
 
-        # 1. Load DataFrames
-        df = _read_csv_with_fallback(Path(manifest_path))
-        
-        if self.feature_mode == "mel_cqt":
-            if not cqt_manifest_path:
-                raise ValueError("cqt_manifest_path must be provided for mel_cqt mode.")
-            df_cqt = _read_csv_with_fallback(Path(cqt_manifest_path))
-            # Merge on wavpath and label to ensure strict alignment
-            df = pd.merge(df, df_cqt, on=["wavpath", "label"], suffixes=("_mel", "_cqt"))
+        manifest_paths: dict[str, str | Path] = dict(feature_manifest_paths or {})
+        if not manifest_paths:
+            manifest_paths[self.feature_names[0]] = manifest_path
+            if "cqt" in self.feature_names and cqt_manifest_path is not None:
+                manifest_paths["cqt"] = cqt_manifest_path
+
+        missing_features = [name for name in self.feature_names if name not in manifest_paths]
+        if missing_features:
+            raise ValueError(
+                f"Missing manifest paths for feature_mode='{self.feature_mode}': {', '.join(missing_features)}"
+            )
+
+        # 1. Load and align DataFrames for the requested feature set.
+        df = self._load_feature_dataframe(self.feature_names[0], manifest_paths[self.feature_names[0]])
+        for feature_name in self.feature_names[1:]:
+            df_feature = self._load_feature_dataframe(feature_name, manifest_paths[feature_name])
+            df = pd.merge(df, df_feature, on=["wavpath", "label"], how="inner")
 
         # 2. Canonicalise labels
         labels_series = df.get("labels", df.get("label"))
@@ -65,6 +77,29 @@ class UniversalAudioDataset(Dataset):
     def __len__(self):
         return len(self.df)
 
+    @staticmethod
+    def _load_feature_dataframe(feature_name: str, manifest_path: str | Path) -> pd.DataFrame:
+        df = _read_csv_with_fallback(Path(manifest_path))
+        if "filepath" not in df.columns:
+            if feature_name == "cqt" and "cqt_path" in df.columns:
+                df["filepath"] = df["cqt_path"]
+            else:
+                raise ValueError(f"Manifest for feature '{feature_name}' is missing a 'filepath' column.")
+
+        if "label" not in df.columns and "labels" in df.columns:
+            df["label"] = df["labels"]
+        if "wavpath" not in df.columns and "sources" in df.columns:
+            df["wavpath"] = df["sources"]
+
+        required_cols = {"filepath", "label", "wavpath"}
+        missing_cols = sorted(required_cols.difference(df.columns))
+        if missing_cols:
+            raise ValueError(
+                f"Manifest for feature '{feature_name}' is missing required columns: {', '.join(missing_cols)}"
+            )
+
+        return df.rename(columns={"filepath": f"filepath_{feature_name}"})
+
     def _load_npy(self, path_str: str) -> torch.Tensor:
         npy_path = Path(path_str) if Path(path_str).is_absolute() else self.root / path_str
         return torch.from_numpy(np.load(npy_path)).float()
@@ -73,22 +108,8 @@ class UniversalAudioDataset(Dataset):
         self._seen += 1
         row = self.df.iloc[idx]
 
-        # 3. Load Features based on mode
-        if self.feature_mode == "mel":
-            x = self._load_npy(row["filepath"])
-        elif self.feature_mode == "cqt":
-            x = self._load_npy(row["filepath"])
-        elif self.feature_mode == "mel_cqt":
-            mel_tensor = self._load_npy(row["filepath_mel"])
-            cqt_tensor = self._load_npy(row["filepath_cqt"])
-            
-            # Align time dimensions (crop to common size)
-            min_w = min(mel_tensor.shape[2], cqt_tensor.shape[2])
-            mel_tensor = mel_tensor[:, :, :min_w]
-            cqt_tensor = cqt_tensor[:, :, :min_w]
-            x = torch.cat([mel_tensor, cqt_tensor], dim=0)
-        else:
-            raise ValueError(f"Unknown feature mode: {self.feature_mode}")
+        feature_tensors = [self._load_npy(row[f"filepath_{name}"]) for name in self.feature_names]
+        x = align_and_stack_feature_tensors(feature_tensors)
 
         if self.transform is not None:
             x = self.transform(x)

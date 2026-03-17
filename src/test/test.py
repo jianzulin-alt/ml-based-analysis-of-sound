@@ -11,11 +11,24 @@ import yaml
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+from src.feature_modes import (
+    align_and_stack_feature_tensors,
+    feature_mode_to_features,
+    feature_mode_to_in_channels,
+    normalize_feature_mode,
+)
 from src.models.CNN import CNN
 from src.models.CNN_DenseNet_121 import CNN_DenseNet_121
+from src.models.CNN_MultiFeatureFusionAttention import (
+    BaselineMultiFeatureCNN,
+    ModelConfig,
+    MultiFeatureFusionAttentionCNNLogits,
+)
 from src.preprocessing.features import (
     compute_stereo_cqt_db,
     compute_stereo_logmel_db,
+    compute_stereo_mfcc,
+    compute_stereo_chroma,
     compute_stft_params,
 )
 from src.preprocessing.preprocessing import (
@@ -96,6 +109,26 @@ def build_model(backbone: str, in_ch: int, num_classes: int, model_cfg: dict) ->
         return CNN(in_ch=in_ch, num_classes=num_classes, p_drop=dropout)
     if name == "cnn_densenet_121":
         return CNN_DenseNet_121(in_ch=in_ch, num_classes=num_classes, p_drop=dropout)
+    if name in {"baseline_multifeature_cnn", "cnn_multifeature_baseline"}:
+        return BaselineMultiFeatureCNN(
+            ModelConfig(
+                in_channels=in_ch,
+                num_classes=num_classes,
+                fc_hidden_dim=int(model_cfg.get("fc_hidden_dim", 256)),
+                attention_reduction=int(model_cfg.get("attention_reduction", 8)),
+                dropout=dropout,
+            )
+        )
+    if name in {"fusion_attention_cnn", "multi_feature_fusion_attention", "cnn_multifeature_fusion_attention"}:
+        return MultiFeatureFusionAttentionCNNLogits(
+            ModelConfig(
+                in_channels=in_ch,
+                num_classes=num_classes,
+                fc_hidden_dim=int(model_cfg.get("fc_hidden_dim", 256)),
+                attention_reduction=int(model_cfg.get("attention_reduction", 8)),
+                dropout=dropout,
+            )
+        )
     raise ValueError(f"Unsupported backbone: {backbone}")
 
 
@@ -156,10 +189,8 @@ class OnTheFlyTestDataset(Dataset):
         self.samples = samples
         self.classes = [c.strip().lower() for c in classes]
         self.label_to_idx = {c: i for i, c in enumerate(self.classes)}
-        self.feature_mode = str(feature_mode).strip().lower()
-
-        if self.feature_mode not in {"mel", "cqt", "mel_cqt"}:
-            raise ValueError(f"Unsupported feature_mode for inference: {self.feature_mode}")
+        self.feature_mode = normalize_feature_mode(feature_mode)
+        self.feature_names = feature_mode_to_features(self.feature_mode)
 
         self.sr = int(audio_cfg["sr"])
         self.duration = float(audio_cfg["duration"])
@@ -174,6 +205,8 @@ class OnTheFlyTestDataset(Dataset):
         self.n_mels = int(audio_cfg.get("n_mels", 128))
         self.n_bins = int(audio_cfg.get("n_bins", 120))
         self.bins_per_octave = int(audio_cfg.get("bins_per_octave", 12))
+        self.n_mfcc = int(audio_cfg.get("n_mfcc", 13))
+        self.n_chroma = int(audio_cfg.get("n_chroma", 12))
         self.loudness_norm = str(audio_cfg.get("loudness_norm", "none"))
         self.target_lufs = float(audio_cfg.get("target_lufs", -23.0))
         self.loudness_peak_limit = float(audio_cfg.get("loudness_peak_limit", 0.99))
@@ -181,7 +214,63 @@ class OnTheFlyTestDataset(Dataset):
     def __len__(self) -> int:
         return len(self.samples)
 
-    def _extract_features(self, wav_path: Path) -> np.ndarray:
+    def _extract_single_feature(self, stereo: np.ndarray, feature_name: str) -> torch.Tensor:
+        if feature_name == "mel":
+            return torch.from_numpy(
+                compute_stereo_logmel_db(
+                    stereo,
+                    self.sr,
+                    n_fft=self.n_fft,
+                    hop=self.hop,
+                    win_length=self.win_length,
+                    n_mels=self.n_mels,
+                    fmin=self.fmin,
+                    fmax=self.fmax,
+                    window=self.window,
+                )
+            ).float()
+        if feature_name == "cqt":
+            return torch.from_numpy(
+                compute_stereo_cqt_db(
+                    stereo,
+                    self.sr,
+                    n_bins=self.n_bins,
+                    bins_per_octave=self.bins_per_octave,
+                    hop_length=self.hop,
+                    fmin=self.fmin,
+                )
+            ).float()
+        if feature_name == "mfcc":
+            return torch.from_numpy(
+                compute_stereo_mfcc(
+                    stereo,
+                    self.sr,
+                    n_fft=self.n_fft,
+                    hop=self.hop,
+                    win_length=self.win_length,
+                    n_mfcc=self.n_mfcc,
+                    n_mels=self.n_mels,
+                    fmin=self.fmin,
+                    fmax=self.fmax,
+                    window=self.window,
+                )
+            ).float()
+        if feature_name == "chroma":
+            return torch.from_numpy(
+                compute_stereo_chroma(
+                    stereo,
+                    self.sr,
+                    n_fft=self.n_fft,
+                    hop=self.hop,
+                    win_length=self.win_length,
+                    n_chroma=self.n_chroma,
+                    fmin=self.fmin,
+                    window=self.window,
+                )
+            ).float()
+        raise ValueError(f"Unsupported feature name: {feature_name}")
+
+    def _extract_features(self, wav_path: Path) -> torch.Tensor:
         stereo = load_audio_as_stereo_and_resample(wav_path, target_sr=self.sr)
         stereo = conform_audio_duration(stereo, self.sr, self.duration)
         stereo = preprocess_loudness(
@@ -192,42 +281,12 @@ class OnTheFlyTestDataset(Dataset):
             peak_limit=self.loudness_peak_limit,
         )
 
-        mel = None
-        if "mel" in self.feature_mode:
-            mel = compute_stereo_logmel_db(
-                stereo,
-                self.sr,
-                n_fft=self.n_fft,
-                hop=self.hop,
-                win_length=self.win_length,
-                n_mels=self.n_mels,
-                fmin=self.fmin,
-                fmax=self.fmax,
-                window=self.window,
-            )
-
-        cqt = None
-        if "cqt" in self.feature_mode:
-            cqt = compute_stereo_cqt_db(
-                stereo,
-                self.sr,
-                n_bins=self.n_bins,
-                bins_per_octave=self.bins_per_octave,
-                hop_length=self.hop,
-                fmin=self.fmin,
-            )
-
-        if self.feature_mode == "mel":
-            return mel.astype(np.float32)
-        if self.feature_mode == "cqt":
-            return cqt.astype(np.float32)
-
-        min_w = min(mel.shape[2], cqt.shape[2])
-        return np.concatenate([mel[:, :, :min_w], cqt[:, :, :min_w]], axis=0).astype(np.float32)
+        feature_tensors = [self._extract_single_feature(stereo, name) for name in self.feature_names]
+        return align_and_stack_feature_tensors(feature_tensors)
 
     def __getitem__(self, idx: int):
         sample = self.samples[idx]
-        x = torch.from_numpy(self._extract_features(sample.wav_path)).float()
+        x = self._extract_features(sample.wav_path)
 
         true_vec = torch.zeros(len(self.classes), dtype=torch.float32)
         for label in sample.relevant_labels:
@@ -477,7 +536,7 @@ def _evaluate_run_impl(
     labels_cfg = load_yaml(labels_cfg_path) if labels_cfg_path.exists() else {}
 
     dataset_name = str(run_cfg.get("dataset", dataset_fallback)).strip().lower()
-    feature_mode = str(run_cfg.get("feature_mode", "mel")).strip().lower()
+    feature_mode = normalize_feature_mode(run_cfg.get("feature_mode", "mel"))
     model_cfg = run_cfg.get("model", {}) if isinstance(run_cfg.get("model"), dict) else {}
     backbone = str(model_cfg.get("backbone", "cnn")).strip().lower()
 
@@ -508,7 +567,7 @@ def _evaluate_run_impl(
         raise ValueError(f"No valid test samples found under: {test_root}")
 
     infer_device = select_device(device)
-    in_ch = 4 if feature_mode == "mel_cqt" else 2
+    in_ch = feature_mode_to_in_channels(feature_mode)
     model = build_model(backbone=backbone, in_ch=in_ch, num_classes=len(classes), model_cfg=model_cfg)
     model.load_state_dict(ckpt.get("model_state", ckpt), strict=True)
     model = model.to(infer_device)

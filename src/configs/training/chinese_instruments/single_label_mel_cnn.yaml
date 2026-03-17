@@ -6,7 +6,7 @@ dataset: "chinese_instruments"
 model:
   backbone: "cnn"
   dropout: 0.3
-  pretrained_weights: "src/models/saved_weights/irmas_single_label_mel_cnn/best_val.pt"
+  pretrained_weights: "src/models/saved_weights/irmas/irmas_single_label_mel_cnn/best_val.pt"
 
 training:
   epochs: 40

@@ -33,10 +33,39 @@ from src.preprocessing.preprocessing import (
 from src.preprocessing.features import (
     compute_stft_params, 
     compute_stereo_logmel_db, 
-    compute_stereo_cqt_db
+    compute_stereo_cqt_db,
+    compute_stereo_mfcc,
+    compute_stereo_chroma,
 )
 
-FEATURE_CHOICES = ("mel", "cqt")
+FEATURE_CHOICES = ("mel", "cqt", "mfcc", "chroma")
+
+FEATURE_SPECS = {
+    "mel": {
+        "result_key": "mel_path",
+        "cache_subdir": "log_mels",
+        "manifest_suffix": "mels",
+        "display_name": "Mel",
+    },
+    "cqt": {
+        "result_key": "cqt_path",
+        "cache_subdir": "log_cqt",
+        "manifest_suffix": "cqt",
+        "display_name": "CQT",
+    },
+    "mfcc": {
+        "result_key": "mfcc_path",
+        "cache_subdir": "mfcc",
+        "manifest_suffix": "mfcc",
+        "display_name": "MFCC",
+    },
+    "chroma": {
+        "result_key": "chroma_path",
+        "cache_subdir": "chroma",
+        "manifest_suffix": "chroma",
+        "display_name": "Chroma",
+    },
+}
 
 
 def parse_dataset(dataset_dir: Path):
@@ -148,37 +177,65 @@ def _process_one(wav_path: Path, label: str, cache_root: Path, audio_cfg: dict, 
         results = {}
 
         # --- Stage 2: Feature Extraction ---
-        
-        # Log-Mel Extraction
+        spec = FEATURE_SPECS[feature_type]
+
         if feature_type == "mel":
-            mel = compute_stereo_logmel_db(
-                stereo, sr, n_fft=n_fft, hop=hop, win_length=win_length,
-                n_mels=audio_cfg["n_mels"], fmin=audio_cfg["fmin"], fmax=audio_cfg["fmax"],
+            feature_arr = compute_stereo_logmel_db(
+                stereo,
+                sr,
+                n_fft=n_fft,
+                hop=hop,
+                win_length=win_length,
+                n_mels=audio_cfg["n_mels"],
+                fmin=audio_cfg["fmin"],
+                fmax=audio_cfg["fmax"],
                 window=window,
             )
-            # Tag filename with params to prevent cache invalidation issues
-            mel_tag = f"sr{sr}_dur{dur}_m{audio_cfg['n_mels']}_w{int(audio_cfg['win_ms'])}_{window}"
-            mel_fn = f"{stem}__{hsh}__{mel_tag}.npy"
-            mel_out = cache_root / "log_mels" / label / mel_fn
-            
-            ensure_directory_exists(mel_out.parent)
-            np.save(mel_out, mel.astype(np.float32))
-            results["mel_path"] = mel_out
-
-        # CQT Extraction
-        if feature_type == "cqt":
-            cqt = compute_stereo_cqt_db(
-                stereo, sr, n_bins=audio_cfg["n_bins"], 
-                bins_per_octave=audio_cfg["bins_per_octave"], 
-                hop_length=hop, fmin=audio_cfg["fmin"]
+            feature_tag = f"sr{sr}_dur{dur}_m{audio_cfg['n_mels']}_w{int(audio_cfg['win_ms'])}_{window}"
+        elif feature_type == "cqt":
+            feature_arr = compute_stereo_cqt_db(
+                stereo,
+                sr,
+                n_bins=audio_cfg["n_bins"],
+                bins_per_octave=audio_cfg["bins_per_octave"],
+                hop_length=hop,
+                fmin=audio_cfg["fmin"],
             )
-            cqt_tag = f"sr{sr}_dur{dur}_b{audio_cfg['n_bins']}_w{int(audio_cfg['win_ms'])}"
-            cqt_fn = f"{stem}__{hsh}__{cqt_tag}.npy"
-            cqt_out = cache_root / "log_cqt" / label / cqt_fn
-            
-            ensure_directory_exists(cqt_out.parent)
-            np.save(cqt_out, cqt.astype(np.float32))
-            results["cqt_path"] = cqt_out
+            feature_tag = f"sr{sr}_dur{dur}_b{audio_cfg['n_bins']}_w{int(audio_cfg['win_ms'])}"
+        elif feature_type == "mfcc":
+            feature_arr = compute_stereo_mfcc(
+                stereo,
+                sr,
+                n_fft=n_fft,
+                hop=hop,
+                win_length=win_length,
+                n_mfcc=int(audio_cfg.get("n_mfcc", 13)),
+                n_mels=int(audio_cfg.get("n_mels", 128)),
+                fmin=float(audio_cfg.get("fmin", 20.0)),
+                fmax=audio_cfg.get("fmax"),
+                window=window,
+            )
+            feature_tag = (
+                f"sr{sr}_dur{dur}_mfcc{int(audio_cfg.get('n_mfcc', 13))}"
+                f"_m{int(audio_cfg.get('n_mels', 128))}_w{int(audio_cfg['win_ms'])}_{window}"
+            )
+        else:
+            feature_arr = compute_stereo_chroma(
+                stereo,
+                sr,
+                n_fft=n_fft,
+                hop=hop,
+                win_length=win_length,
+                n_chroma=int(audio_cfg.get("n_chroma", 12)),
+                window=window,
+            )
+            feature_tag = f"sr{sr}_dur{dur}_chroma{int(audio_cfg.get('n_chroma', 12))}_w{int(audio_cfg['win_ms'])}_{window}"
+
+        feature_fn = f"{stem}__{hsh}__{feature_tag}.npy"
+        feature_out = cache_root / spec["cache_subdir"] / label / feature_fn
+        ensure_directory_exists(feature_out.parent)
+        np.save(feature_out, feature_arr.astype(np.float32))
+        results[spec["result_key"]] = feature_out
 
         return True, wav_path, label, results, None
 
@@ -187,12 +244,12 @@ def _process_one(wav_path: Path, label: str, cache_root: Path, audio_cfg: dict, 
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Extract Mel or CQT features from a configured dataset.",
+        description="Extract Mel, CQT, MFCC, or Chroma features from a configured dataset.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  .venv/bin/python src/scripts/extract_features.py --dataset irmas --feature cqt\n"
-            "  .venv/bin/python src/scripts/extract_features.py --dataset chinese_instruments --feature mel --num_workers 8\n"
+            "  python -m src.scripts.extract_features --dataset irmas --feature cqt\n"
+            "  python -m src.scripts.extract_features --dataset chinese_instruments --feature mfcc --num_workers 8\n"
         ),
     )
     ap.add_argument("--config", default="src/configs/audio_params.yaml", help="Path to YAML audio/dataset config.")
@@ -200,7 +257,7 @@ def main():
     ap.add_argument(
         "--feature",
         required=True,
-        help="Feature family: mel | cqt ",
+        help="Feature family: mel | cqt | mfcc | chroma",
     )
     ap.add_argument("--num_workers", type=int, default=12, help="Parallel worker processes.")
     ap.add_argument(
@@ -273,7 +330,8 @@ def main():
 
     print(f"Processing {len(wavs_and_labels)} files from {args.dataset}...")
 
-    mel_rows, cqt_rows = [], []
+    rows_by_feature = {name: [] for name in FEATURE_CHOICES}
+    n_success = 0
     n_fail = 0
 
     # Multi-core processing
@@ -287,11 +345,11 @@ def main():
             success, wav_path, label, results, err = fut.result()
             
             if success:
-                # Store paths as strings for CSV writing
-                if "mel_path" in results:
-                    mel_rows.append([str(results["mel_path"]), label, str(wav_path)])
-                if "cqt_path" in results:
-                    cqt_rows.append([str(results["cqt_path"]), label, str(wav_path)])
+                n_success += 1
+                for feature_name, spec in FEATURE_SPECS.items():
+                    result_key = spec["result_key"]
+                    if result_key in results:
+                        rows_by_feature[feature_name].append([str(results[result_key]), label, str(wav_path)])
             else:
                 n_fail += 1
                 print(f"\n[ERROR] {wav_path.name}: {err}")
@@ -299,25 +357,18 @@ def main():
     # --- Stage 3: Manifest Generation ---
     # We follow the format: filepath (npy), label, wavpath (source)
     
-    if mel_rows:
-        mel_csv = manifest_base.with_name(f"{args.dataset}_train_mels.csv")
-        ensure_directory_exists(mel_csv.parent)
-        with open(mel_csv, "w", newline="", encoding="utf-8") as f:
+    feature_rows = rows_by_feature.get(args.feature, [])
+    if feature_rows:
+        spec = FEATURE_SPECS[args.feature]
+        manifest_path = manifest_base.with_name(f"{args.dataset}_train_{spec['manifest_suffix']}.csv")
+        ensure_directory_exists(manifest_path.parent)
+        with open(manifest_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["filepath", "label", "wavpath"])
-            writer.writerows(mel_rows)
-        print(f"Saved Mel manifest: {mel_csv}")
+            writer.writerows(feature_rows)
+        print(f"Saved {spec['display_name']} manifest: {manifest_path}")
 
-    if cqt_rows:
-        cqt_csv = manifest_base.with_name(f"{args.dataset}_train_cqt.csv")
-        ensure_directory_exists(cqt_csv.parent)
-        with open(cqt_csv, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["filepath", "label", "wavpath"])
-            writer.writerows(cqt_rows)
-        print(f"Saved CQT manifest: {cqt_csv}")
-
-    print(f"Extraction complete. Success: {len(mel_rows) or len(cqt_rows)}, Fail: {n_fail}")
+    print(f"Extraction complete. Success: {n_success}, Fail: {n_fail}")
 
 if __name__ == "__main__":
     main()

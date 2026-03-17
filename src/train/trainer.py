@@ -315,7 +315,39 @@ def collate_fn_padd(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[tor
 def save_checkpoint(payload: Dict[str, Any], filepath: Path) -> None:
     """Safely writes a checkpoint dictionary to disk."""
     filepath.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(payload, filepath)
+    last_err: Exception | None = None
+
+    for attempt in range(5):
+        tmp_path = filepath.with_name(f"{filepath.name}.tmp-{os.getpid()}-{attempt}")
+        try:
+            torch.save(payload, tmp_path)
+            os.replace(tmp_path, filepath)
+            return
+        except (OSError, PermissionError, RuntimeError) as exc:
+            last_err = exc
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+            message = str(exc).lower()
+            retryable = (
+                getattr(exc, "winerror", None) == 1224
+                or "error code: 1224" in message
+                or "user-mapped section open" in message
+            )
+            if not retryable or attempt == 4:
+                raise
+
+            wait_s = 0.5 * (attempt + 1)
+            print(
+                f"[WARN] Checkpoint save blocked for {filepath.name}; "
+                f"retrying in {wait_s:.1f}s ({attempt + 1}/5)"
+            )
+            time.sleep(wait_s)
+
+    if last_err is not None:
+        raise last_err
 
 
 def load_checkpoint(
