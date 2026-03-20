@@ -119,7 +119,12 @@ def build_model(backbone: str, in_ch: int, num_classes: int, model_cfg: dict) ->
                 dropout=dropout,
             )
         )
-    if name in {"fusion_attention_cnn", "multi_feature_fusion_attention", "cnn_multifeature_fusion_attention"}:
+    if name in {
+        "fusion_attention_cnn",
+        "multi_feature_fusion_attention",
+        "cnn_multifeature_fusion_attention",
+        "cnn_multifeaturefusionattention",
+    }:
         return MultiFeatureFusionAttentionCNNLogits(
             ModelConfig(
                 in_channels=in_ch,

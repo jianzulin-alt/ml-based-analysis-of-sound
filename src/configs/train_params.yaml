@@ -1,4 +1,4 @@
-experiment_name: "irmas_single_label_mfcc_cqt_chroma_densenet_121"
+experiment_name: "irmas_single_label_mfcc_cqt_chroma_CNN_MultiFeatureFusionAttention"
 task_mode: "single_label"
 
 # dataset options: irmas | chinese_instruments
@@ -14,7 +14,7 @@ model:
   #   cnn_densenet_121
   #   baseline_multifeature_cnn
   #   fusion_attention_cnn
-  backbone: "cnn_densenet_121"
+  backbone: "CNN_MultiFeatureFusionAttention"
   dropout: 0.3
 
   # Used by the multi-feature fusion backbones.
