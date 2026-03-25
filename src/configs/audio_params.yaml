@@ -3,6 +3,8 @@ audio:
   sr: 44100
   duration: 3.0
   n_mels: 128
+  n_mfcc: 13
+  n_chroma: 12
   n_bins: 120 # CQT (Nyquist-safe at sr=44100, fmin=20, bins_per_octave=12; max is 122)
   bins_per_octave: 12
   win_ms: 30.0

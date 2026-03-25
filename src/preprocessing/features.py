@@ -110,3 +110,76 @@ def compute_stereo_cqt_db(
         feats.append(C_db)
         
     return np.stack(feats, axis=0) # Shape: (2, n_bins, Time)
+
+
+def compute_stereo_mfcc(
+    stereo: np.ndarray,
+    sr: int,
+    n_fft: int,
+    hop: int,
+    win_length: int,
+    n_mfcc: int = 13,
+    n_mels: int = 128,
+    fmin: float = 20.0,
+    fmax: Optional[float] = None,
+    window: str = "hann",
+) -> np.ndarray:
+    """
+    Compute MFCC features for each stereo channel and stack them.
+
+    MFCCs capture the coarse spectral envelope and are a common timbre-oriented
+    feature family for instrument classification.
+    """
+    fmax = fmax or (sr / 2)
+    window_name = str(window or "hann")
+    feats = []
+
+    for ch in range(2):
+        coeffs = librosa.feature.mfcc(
+            y=stereo[ch],
+            sr=sr,
+            n_mfcc=n_mfcc,
+            n_fft=n_fft,
+            hop_length=hop,
+            win_length=win_length,
+            window=window_name,
+            n_mels=n_mels,
+            fmin=fmin,
+            fmax=fmax,
+        ).astype(np.float32)
+        feats.append(coeffs)
+
+    return np.stack(feats, axis=0)  # Shape: (2, n_mfcc, Time)
+
+
+def compute_stereo_chroma(
+    stereo: np.ndarray,
+    sr: int,
+    n_fft: int,
+    hop: int,
+    win_length: int,
+    n_chroma: int = 12,
+    window: str = "hann",
+) -> np.ndarray:
+    """
+    Compute chroma features for each stereo channel and stack them.
+
+    Chroma maps spectral energy into pitch classes, which can help the model
+    track tonal structure that is complementary to timbre-heavy features.
+    """
+    window_name = str(window or "hann")
+    feats = []
+
+    for ch in range(2):
+        chroma = librosa.feature.chroma_stft(
+            y=stereo[ch],
+            sr=sr,
+            n_fft=n_fft,
+            hop_length=hop,
+            win_length=win_length,
+            window=window_name,
+            n_chroma=n_chroma,
+        ).astype(np.float32)
+        feats.append(chroma)
+
+    return np.stack(feats, axis=0)  # Shape: (2, n_chroma, Time)

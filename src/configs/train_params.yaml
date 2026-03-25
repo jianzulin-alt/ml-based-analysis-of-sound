@@ -1,0 +1,37 @@
+experiment_name: "irmas_single_label_mfcc_cqt_chroma_CNN_MultiFeatureFusionAttention"
+task_mode: "single_label"
+
+# dataset options: irmas | chinese_instruments
+dataset: "irmas"
+
+# feature_mode options:
+#   mel | cqt | mfcc | chroma | mel_cqt | mel_chroma | mfcc_cqt_chroma
+feature_mode: "mfcc_cqt_chroma"
+
+model:
+  # backbone options:
+  #   cnn
+  #   cnn_densenet_121
+  #   baseline_multifeature_cnn
+  #   fusion_attention_cnn
+  backbone: "CNN_MultiFeatureFusionAttention"
+  dropout: 0.3
+
+  # Used by the multi-feature fusion backbones.
+  attention_reduction: 8
+  fc_hidden_dim: 256
+
+  # Leave empty for training from scratch.
+  pretrained_weights: ""
+
+training:
+  epochs: 60
+  batch_size: 32
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  val_frac: 0.2
+  patience: 8
+  num_workers: 0
+  seed: 1337
+  mixed_precision: true
+  pad_collate: false

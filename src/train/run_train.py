@@ -4,7 +4,7 @@ import argparse
 import csv
 import os
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import torch
@@ -13,8 +13,19 @@ import yaml
 from torch.utils.data import DataLoader, Subset, random_split
 
 from src.data_loader import UniversalAudioDataset
+from src.feature_modes import (
+    feature_mode_to_features,
+    feature_mode_to_in_channels,
+    manifest_suffix_for_feature,
+    normalize_feature_mode,
+)
 from src.models.CNN import CNN
 from src.models.CNN_DenseNet_121 import CNN_DenseNet_121
+from src.models.CNN_MultiFeatureFusionAttention import (
+    BaselineMultiFeatureCNN,
+    ModelConfig,
+    MultiFeatureFusionAttentionCNNLogits,
+)
 from src.train.trainer import AudioTrainer, collate_fn_padd, get_device, load_checkpoint, seed_everything
 
 def _repo_root() -> Path:
@@ -38,13 +49,6 @@ def load_yaml(path: Path) -> dict:
 
 def relative_to_root(path: Path, root: Path) -> str:
     return Path(os.path.relpath(path.resolve(), root)).as_posix()
-
-
-def normalize_feature_mode(feature_mode: str) -> str:
-    raw = str(feature_mode).strip().lower()
-    if raw not in {"mel", "cqt"}:
-        raise ValueError(f"Unsupported feature_mode: {feature_mode}")
-    return raw
 
 
 def choose_classes(labels_cfg: dict, dataset_name: str) -> List[str]:
@@ -122,65 +126,30 @@ def resolve_feature_manifests(
     task_mode: str,
     root: Path,
     run_dir: Path,
-) -> Tuple[Path, Optional[Path]]:
-    """
-    Returns (primary_manifest, cqt_manifest_if_needed).
-    """
+) -> Dict[str, Path]:
     # Multi-label manifest preference is temporarily disabled.
     # prefer_mixed = task_mode == "multi_label"
     _ = task_mode
+    feature_names = feature_mode_to_features(feature_mode)
+    manifest_paths: Dict[str, Path] = {}
 
-    if feature_mode == "mel":
-        candidates = []
-        # if prefer_mixed:
-        #     candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels_mixed", root))
-        candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels", root))
-        mel_path = _first_existing(candidates)
-        if mel_path is None:
-            raise FileNotFoundError(f"Could not find mel manifest. Tried: {[str(p) for p in candidates]}")
-        mel_path = _prepare_manifest_for_dataset(
-            mel_path, run_dir, ensure_filepath_from_cqt=False, ensure_merge_keys=False
-        )
-        return mel_path, None
+    for feature_name in feature_names:
+        suffix = manifest_suffix_for_feature(feature_name)
+        candidates = _candidate_manifest_paths(dataset_name, dataset_cfg, suffix, root)
+        manifest_path = _first_existing(candidates)
+        if manifest_path is None:
+            raise FileNotFoundError(
+                f"Could not find manifest for feature '{feature_name}'. Tried: {[str(p) for p in candidates]}"
+            )
 
-    if feature_mode == "cqt":
-        candidates = []
-        # if prefer_mixed:
-        #     candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt_mixed", root))
-        candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt", root))
-        cqt_path = _first_existing(candidates)
-        if cqt_path is None:
-            raise FileNotFoundError(f"Could not find cqt manifest. Tried: {[str(p) for p in candidates]}")
-        cqt_path = _prepare_manifest_for_dataset(
-            cqt_path, run_dir, ensure_filepath_from_cqt=True, ensure_merge_keys=False
-        )
-        return cqt_path, None
-
-    # mel_cqt
-    mel_candidates = []
-    cqt_candidates = []
-    # if prefer_mixed:
-    #     mel_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels_mixed", root))
-    #     cqt_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt_mixed", root))
-    mel_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "mels", root))
-    cqt_candidates.extend(_candidate_manifest_paths(dataset_name, dataset_cfg, "cqt", root))
-
-    mel_path = _first_existing(mel_candidates)
-    cqt_path = _first_existing(cqt_candidates)
-    if mel_path is None or cqt_path is None:
-        raise FileNotFoundError(
-            "Could not find mel/cqt manifests for mel_cqt mode.\n"
-            f"mel tried: {[str(p) for p in mel_candidates]}\n"
-            f"cqt tried: {[str(p) for p in cqt_candidates]}"
+        manifest_paths[feature_name] = _prepare_manifest_for_dataset(
+            manifest_path,
+            run_dir,
+            ensure_filepath_from_cqt=(feature_name == "cqt"),
+            ensure_merge_keys=(len(feature_names) > 1),
         )
 
-    mel_path = _prepare_manifest_for_dataset(
-        mel_path, run_dir, ensure_filepath_from_cqt=False, ensure_merge_keys=True
-    )
-    cqt_path = _prepare_manifest_for_dataset(
-        cqt_path, run_dir, ensure_filepath_from_cqt=True, ensure_merge_keys=True
-    )
-    return mel_path, cqt_path
+    return manifest_paths
 
 
 def load_saved_split_indices(split_indices_path: Path, dataset_size: int) -> Tuple[List[int], List[int]]:
@@ -232,6 +201,31 @@ def build_model(backbone: str, in_ch: int, num_classes: int, model_cfg: dict) ->
         return CNN(in_ch=in_ch, num_classes=num_classes, p_drop=dropout)
     if name in {"cnn_densenet_121"}:
         return CNN_DenseNet_121(in_ch=in_ch, num_classes=num_classes, p_drop=dropout)
+    if name in {"baseline_multifeature_cnn", "cnn_multifeature_baseline"}:
+        return BaselineMultiFeatureCNN(
+            ModelConfig(
+                in_channels=in_ch,
+                num_classes=num_classes,
+                fc_hidden_dim=int(model_cfg.get("fc_hidden_dim", 256)),
+                attention_reduction=int(model_cfg.get("attention_reduction", 8)),
+                dropout=dropout,
+            )
+        )
+    if name in {
+        "fusion_attention_cnn",
+        "multi_feature_fusion_attention",
+        "cnn_multifeature_fusion_attention",
+        "cnn_multifeaturefusionattention",
+    }:
+        return MultiFeatureFusionAttentionCNNLogits(
+            ModelConfig(
+                in_channels=in_ch,
+                num_classes=num_classes,
+                fc_hidden_dim=int(model_cfg.get("fc_hidden_dim", 256)),
+                attention_reduction=int(model_cfg.get("attention_reduction", 8)),
+                dropout=dropout,
+            )
+        )
     raise ValueError(f"Unsupported backbone: {backbone}")
 
 def load_pretrained_for_finetuning(
@@ -337,7 +331,7 @@ def main() -> None:
             f"Resume requested but checkpoint not found: {resume_checkpoint}"
         )
 
-    primary_manifest, cqt_manifest = resolve_feature_manifests(
+    feature_manifests = resolve_feature_manifests(
         feature_mode=feature_mode,
         dataset_name=dataset_name,
         dataset_cfg=dataset_cfg,
@@ -345,18 +339,17 @@ def main() -> None:
         root=root,
         run_dir=run_dir,
     )
-    print(f"Using primary manifest: {primary_manifest}")
-    if cqt_manifest is not None:
-        print(f"Using cqt manifest: {cqt_manifest}")
+    for feature_name, manifest_path in feature_manifests.items():
+        print(f"Using {feature_name} manifest: {manifest_path}")
 
     seed = int(tr_cfg.get("seed", 1337))
     seed_everything(seed)
 
     dataset = UniversalAudioDataset(
         feature_mode=feature_mode,
-        manifest_path=primary_manifest,
+        manifest_path=next(iter(feature_manifests.values())),
         class_names=classes,
-        cqt_manifest_path=cqt_manifest,
+        feature_manifest_paths=feature_manifests,
         project_root=str(root),
     )
 
@@ -433,7 +426,7 @@ def main() -> None:
         f"train_batches={len(train_loader)} | val_batches={len(val_loader)}"
     )
 
-    in_ch = 4 if feature_mode == "mel_cqt" else 2
+    in_ch = feature_mode_to_in_channels(feature_mode)
     backbone = model_cfg.get("backbone", "cnn")
     model = build_model(backbone=backbone, in_ch=in_ch, num_classes=n_classes, model_cfg=model_cfg).to(device)
     model_total_params, model_trainable_params = count_model_parameters(model)
@@ -491,8 +484,10 @@ def main() -> None:
         "train_config": relative_to_root(train_cfg_path, root),
         "audio_config": relative_to_root(audio_cfg_path, root),
         "labels_config": relative_to_root(labels_cfg_path, root),
-        "primary_manifest": relative_to_root(primary_manifest, root),
-        "cqt_manifest": relative_to_root(cqt_manifest, root) if cqt_manifest else "",
+        "primary_manifest": relative_to_root(next(iter(feature_manifests.values())), root),
+        "feature_manifests": {
+            name: relative_to_root(path, root) for name, path in feature_manifests.items()
+        },
         "run_dir": relative_to_root(run_dir, root),
         "resume_checkpoint": relative_to_root(resume_checkpoint, root) if args.resume else "",
     }

@@ -64,6 +64,10 @@ Download from teams and place in `data/train`
 
 [Train Models](documentation/training.md)
 
+[Config Layout](src/configs/README.md)
+
+[Repository Structure](documentation/repo_structure.md)
+
  [Dataset](data/README.md) 
 
  [Training Log](src/train/training_log.md)
