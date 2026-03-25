@@ -1,38 +1,41 @@
-# configs/audio_params.yaml
 audio:
   sr: 44100
   duration: 3.0
+  
+  # --- Feature Dimensions ---
   n_mels: 128
   n_mfcc: 13
   n_chroma: 12
-  n_bins: 120 # CQT (Nyquist-safe at sr=44100, fmin=20, bins_per_octave=12; max is 122)
+  n_bins: 120 
   bins_per_octave: 12
+  
+  # --- STFT/Windowing Parameters ---
   win_ms: 30.0
   hop_ms: 10.0
   fmin: 20.0
-  fmax: 20000.0
+  fmax: 20000.0 
   window: "hann"
-  loudness_norm: "none"  # Options: "none", "lufs"
+  
+  # --- Loudness Normalisation ---
+  loudness_norm: "none"  
   target_lufs: -23.0
   loudness_peak_limit: 0.99
 
+  # --- Feature Normalisation ---
+  # 'min_max' scales decibel arrays to [0, 1]. Highly recommended for CNNs.
+  # 'standard' scales to zero mean and unit variance.
+  feature_norm: "min_max"
+
+  # --- Data Augmentation ---
+  # Duplicates and swaps the left/right channels to double the dataset size.
+  channel_swap_augmentation: False
 
 datasets:
   chinese_instruments:
     train_dir: "data/train"
     cache_root: "data/processed/chinese"
     manifest: "data/processed/chinese_train.csv"
-    test: "data/test/a-touch-of-zen/"
   irmas:
     train_dir: "data/IRMAS/IRMAS-TrainingData"
     cache_root: "data/processed/irmas"
     manifest: "data/processed/irmas_train.csv"
-    test: "data/IRMAS/IRMAS-TestingData-Part1/Part1"
-
-mixing:
-  num_mixes: 12000
-  min_sources: 2
-  max_sources: 2
-  snr_db_min: -3.0
-  snr_db_max: 6.0
-  seed: 1337

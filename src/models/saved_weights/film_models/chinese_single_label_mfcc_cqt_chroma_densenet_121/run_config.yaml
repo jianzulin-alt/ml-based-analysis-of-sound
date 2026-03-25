@@ -1,0 +1,47 @@
+experiment_name: chinese_single_label_mfcc_cqt_chroma_densenet_121
+task_mode: single_label
+dataset: chinese_instruments
+feature_mode: mfcc_cqt_chroma
+model:
+  backbone: cnn_densenet_121
+  dropout: 0.3
+  attention_reduction: 8
+  fc_hidden_dim: 256
+  pretrained_weights: ''
+training:
+  epochs: 60
+  batch_size: 32
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  val_frac: 0.2
+  patience: 8
+  num_workers: 0
+  seed: 1337
+  mixed_precision: true
+  pad_collate: false
+classes:
+- strings
+- brass
+- woodwind
+- sheng
+- dizi
+- timpani
+- erhu
+- pipa
+- suona
+- guzheng
+- piano
+- guqin
+- xiao
+- yangqin
+resolved:
+  train_config: src/configs/train_params.yaml
+  audio_config: src/configs/audio_params.yaml
+  labels_config: src/configs/labels.yaml
+  primary_manifest: data/processed/chinese_instruments_train_mfcc.csv
+  feature_manifests:
+    mfcc: data/processed/chinese_instruments_train_mfcc.csv
+    cqt: data/processed/chinese_instruments_train_cqt.csv
+    chroma: data/processed/chinese_instruments_train_chroma.csv
+  run_dir: src/models/saved_weights/chinese_single_label_mfcc_cqt_chroma_densenet_121
+  resume_checkpoint: ''

@@ -1,0 +1,22 @@
+# src/configs/training/irmas/mel_cnn.yaml
+experiment_name: "irmas_multi_label_mel_cnn"
+task_mode: "multi_label"
+dataset: "irmas"
+feature_mode: "mel"
+
+model:
+  backbone: "cnn"
+  dropout: 0.3
+  pretrained_weights: ""
+
+training:
+  epochs: 50
+  batch_size: 32
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  val_frac: 0.2
+  loss_function: "bce" 
+  patience: 10
+  num_workers: 4
+  seed: 1337
+  mixed_precision: true
