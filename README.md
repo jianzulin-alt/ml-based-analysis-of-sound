@@ -47,7 +47,8 @@ Add the film test dataset here: `data/test/a-touch-of-zen`
 
 **IRMAS dataset (Pretraining)**
 
-Download IRMAS train and test datasets and add it here: `data/IRMAS`.
+
+Download IRMAS train and test datasets [here](https://zenodo.org/records/1290750#.WzCwSRyxXMU) and add it here: `data/IRMAS`.
 
 **Train Dataset**
 

@@ -1,0 +1,25 @@
+experiment_name: "chinese_finetune_fusion_attn_mel_cqt"
+task_mode: "multi_label"
+dataset: "chinese_instruments"
+feature_mode: "mel_cqt"
+
+model:
+  backbone: "fusion"
+  dropout: 0.4           # Slightly higher dropout for the smaller target dataset
+  fc_hidden_dim: 256
+  attention_reduction: 8
+  # MUST point to the best weights from the IRMAS run above
+  pretrained_weights: "src/models/saved_weights/irmas_pretrain_fusion_attn_mel_cqt/best_val.pt"
+
+training:
+  epochs: 50
+  batch_size: 32
+  learning_rate: 0.00002 # Extremely low LR to fine-tune without destroying the attention weights
+  weight_decay: 0.0005
+  val_frac: 0.2
+  use_spec_augment: true
+  loss_function: "bce"   # Multi-label loss for film evaluation compatibility
+  patience: 10
+  num_workers: 4
+  seed: 1337
+  mixed_precision: true

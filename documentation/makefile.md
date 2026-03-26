@@ -1,17 +1,20 @@
 # Makefile usage
 
-This project `makefile` currently wraps feature extraction commands via:
+This project `makefile` wraps feature extraction and training commands via:
 
 - `PY=.venv/bin/python`
-- `CONFIG=src/configs/audio_params.yaml`
+- `AUDIO_CONFIG=src/configs/audio_params.yaml`
 - `LABELS_CONFIG=src/configs/labels.yaml`
+- `TRAIN_CONFIG=src/configs/train_params.yaml`
 
 ## Core variables
 
 - `DATASET`: dataset key from `audio_params.yaml` (`irmas`, `chinese_instruments`)
-- `FEATURE`: feature family for extraction (`mel`, `cqt`)
+- `FEATURE`: feature family for extraction (`mel`, `cqt`, `mfcc`, `chroma`)
 - `WORKERS`: number of parallel worker processes for extraction
 - `LABELS_CONFIG`: label allowlist YAML used by `extract_features.py`
+- `TRAIN_CONFIG`: training YAML passed to `run_train.py`
+- `TRAIN_OUTPUT_DIR`: optional output directory override for training runs
 
 Defaults in `makefile`:
 
@@ -19,17 +22,27 @@ Defaults in `makefile`:
 - `WORKERS ?= 12`
 - `DATASET ?= irmas`
 
-Note: `MIX_DATASET`, `MIX_FEATURE`, and `MIX_WORKERS` are still defined in `makefile`, but the `mix` target is currently commented out.
-
 ## Targets
 
 - `make extract DATASET=irmas FEATURE=mel WORKERS=12`
   - Runs `src/scripts/extract_features.py` with selected dataset/feature/workers.
   - Uses `LABELS_CONFIG` to filter which label folders are included.
+- `make train TRAIN_CONFIG=src/configs/train_params.yaml`
+  - Runs `src/scripts/run_train.py` with the selected training, audio, and label configs.
+- `make train-dry`
+  - Validates the training configuration and exits before starting training.
+- `make train-resume TRAIN_OUTPUT_DIR=src/models/saved_weights/<run>`
+  - Resumes a stopped run from an existing output directory.
+- `make train-help`
+  - Shows CLI help for `run_train.py`.
 - `make irmas FEATURE=mel WORKERS=12`
-  - IRMAS-focused shortcut (inherits normal `extract` behavior).
+  - Shortcut that pins `DATASET=irmas` and runs extraction.
 - `make chinese FEATURE=mel WORKERS=8`
   - Shortcut that sets `DATASET=chinese_instruments` and runs extraction.
+- `make mel`, `make cqt`, `make mfcc`, `make chroma`
+  - Shortcuts that pin `FEATURE` and run extraction.
+- `make help`
+  - Prints the main targets and common invocation patterns.
 - `make extract-help`
   - Shows CLI help for `extract_features.py`.
 - `make clean`

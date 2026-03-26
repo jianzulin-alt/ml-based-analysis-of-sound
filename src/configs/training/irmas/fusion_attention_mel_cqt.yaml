@@ -1,0 +1,26 @@
+experiment_name: "irmas_pretrain_fusion_attn_mel_cqt"
+task_mode: "multi_label" # Kept as multi-label for polyphonic robustness
+dataset: "irmas"
+feature_mode: "mel_cqt"  # Fuses Mel and CQT into a 2-channel input
+
+model:
+  backbone: "fusion"     # Triggers MultiFeatureFusionAttentionCNNLogits in builder.py
+  dropout: 0.3           # Matches your Python implementation default
+  fc_hidden_dim: 256
+  attention_reduction: 8
+  pretrained_weights: ""
+
+training:
+  epochs: 100            # Increased to match the paper
+  batch_size: 32
+  learning_rate: 0.0001  # Exact LR from the paper (1e-4)
+  weight_decay: 0.0001
+  val_frac: 0.2
+  use_spec_augment: true # Highly recommended for this deep architecture
+  loss_function: "bce"
+  patience: 12
+  num_workers: 4
+  seed: 1337
+  mixed_precision: true
+
+  

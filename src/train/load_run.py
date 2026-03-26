@@ -154,11 +154,29 @@ def history_dict_to_df(history: dict) -> pd.DataFrame:
     return pd.DataFrame(values)
 
 
+def ensure_epoch_column(history_df: pd.DataFrame) -> pd.DataFrame:
+    if history_df.empty:
+        return history_df
+
+    normalized = history_df.copy()
+    if "epoch" not in normalized.columns:
+        normalized.insert(0, "epoch", np.arange(1, len(normalized) + 1))
+        return normalized
+
+    missing_epoch = normalized["epoch"].isna()
+    if missing_epoch.any():
+        generated = pd.Series(np.arange(1, len(normalized) + 1), index=normalized.index)
+        normalized.loc[missing_epoch, "epoch"] = generated.loc[missing_epoch]
+
+    return normalized
+
+
 def load_history(history_csv_path: Path, ckpt_path: Path | None):
     notes: list[str] = []
 
     if history_csv_path.exists():
-        return pd.read_csv(history_csv_path), 'history.csv', notes
+        history_df = ensure_epoch_column(pd.read_csv(history_csv_path))
+        return history_df, 'history.csv', notes
 
     notes.append(f'Missing history.csv: {history_csv_path}')
 
@@ -170,7 +188,7 @@ def load_history(history_csv_path: Path, ckpt_path: Path | None):
         import torch
 
         ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
-        history_df = history_dict_to_df(ckpt.get('history', {}))
+        history_df = ensure_epoch_column(history_dict_to_df(ckpt.get('history', {})))
         if history_df.empty:
             notes.append(f'Checkpoint loaded but history payload empty: {ckpt_path}')
             return history_df, f'checkpoint:{ckpt_path.name}', notes
