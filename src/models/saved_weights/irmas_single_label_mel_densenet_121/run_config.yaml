@@ -13,7 +13,7 @@ training:
   weight_decay: 0.0001
   val_frac: 0.2
   patience: 12
-  num_workers: 8
+  num_workers: 0
   seed: 1337
   mixed_precision: true
 classes:
@@ -35,4 +35,4 @@ resolved:
   primary_manifest: data/processed/irmas_train_mels.csv
   cqt_manifest: ''
   run_dir: src/models/saved_weights/irmas_single_label_mel_densenet_121
-  resume_checkpoint: src/models/saved_weights/irmas_single_label_mel_densenet_121/last.pt
+  resume_checkpoint: ''

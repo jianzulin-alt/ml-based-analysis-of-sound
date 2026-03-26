@@ -17,7 +17,7 @@ training:
   weight_decay: 0.0001
   val_frac: 0.2
   patience: 12
-  num_workers: 8
+  num_workers: 0
   seed: 1337
   mixed_precision: true
 
