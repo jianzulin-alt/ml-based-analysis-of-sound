@@ -1,0 +1,57 @@
+experiment_name: irmas_single_label_mel_densenet
+task_mode: single_label
+dataset: irmas
+feature_mode: mel
+classes:
+- cel
+- cla
+- flu
+- gac
+- gel
+- org
+- pia
+- sax
+- tru
+- vio
+- voi
+model:
+  backbone: cnn_densenet_121
+  dropout: 0.3
+  pretrained_weights: ''
+training:
+  epochs: 50
+  batch_size: 32
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  val_frac: 0.2
+  use_spec_augment: false
+  loss_function: standard
+  patience: 10
+  num_workers: 4
+  seed: 1337
+  mixed_precision: true
+audio_params:
+  sr: 44100
+  duration: 3.0
+  n_mels: 128
+  n_mfcc: 13
+  n_chroma: 12
+  n_bins: 120
+  bins_per_octave: 12
+  win_ms: 30.0
+  hop_ms: 10.0
+  fmin: 20.0
+  fmax: 20000.0
+  window: hann
+  loudness_norm: none
+  target_lufs: -23.0
+  loudness_peak_limit: 0.99
+  feature_norm: min_max
+  channel_swap_augmentation: false
+resolved:
+  train_config: src/configs/training/irmas/mel_densenet.yaml
+  audio_config: src/configs/audio_params.yaml
+  labels_config: src/configs/labels.yaml
+  primary_manifest: data/processed/irmas_train_mels.csv
+  run_dir: src/models/saved_weights/irmas_single_label_mel_densenet
+  resume_checkpoint: ''

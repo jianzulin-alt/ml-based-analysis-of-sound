@@ -1,0 +1,22 @@
+experiment_name: "film_single_label_mel_cnn_ft_irmas"
+task_mode: "single_label"
+feature_mode: "mel"
+dataset: "chinese_instruments"
+
+model:
+  backbone: "cnn"
+  dropout: 0.4 # Higher to prevent overfitting on this smaller dataset
+  pretrained_weights: "src/models/saved_weights/irmas_single_label_mel_cnn/best_val.pt" # Ensure this path is correct!
+
+training:
+  epochs: 40
+  batch_size: 32
+  learning_rate: 0.00005 # CRITICAL: Kept at 5e-5 to preserve pre-trained IRMAS filters
+  weight_decay: 0.0005
+  val_frac: 0.2
+  loss_function: "focal" # BCEFocalLoss to handle the 10:1 class imbalance
+  use_spec_augment: true # frequencies/time to force robust feature learning
+  patience: 8
+  num_workers: 4
+  seed: 1337
+  mixed_precision: true

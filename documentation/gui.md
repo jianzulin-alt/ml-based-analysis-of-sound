@@ -1,25 +1,32 @@
-### Launch the GUI
+# Instrument Classifier GUI
+
+
+
+## Repository Structure
+
+Ensure your files are organised as follows to allow the predictor to correctly resolve paths and configurations:
+
+```text
+.
+├── src/
+│   ├── gui/
+│   │   ├── gradio_interface.py  # Gradio layout and event logic
+│   │   └── predictor.py         # Config-driven inference wrapper
+│   ├── models/
+│   │   ├── builder.py           # Model factory (CNN, DenseNet, etc.)
+│   │   └── saved_weights/       # Checkpoints and run_configs
+│   └── preprocessing/           # Core DSP (Mel, CQT, Normalisation)
+└── requirements.txt
+```
+
+
+## How to Run
+
+The GUI must be executed as a module from the repository root to ensure all internal package imports function correctly.
+
+### Launch Command
 
 
 ```bash
-make run_gradio_gui
+python -m src.gui.gradio_interface
 ```
-
-This launches the two-tab Gradio app (Model + Info) using the fine-tuned weights at `saved_weights/chinese_single_class/train_1/best_val_acc.pt` by default. Upload or record a ~3 second clip, inspect the generated mel spectrogram, and review the predicted class
-probabilities in the browser.
-
-### Evaluate A Checkpoint And Save Results
-
-```bash
-python -m src.test.test \
-  --checkpoint src/models/saved_weights/MobileNetV3_v1/best_val.pt \
-  --test_manifest data/test/a-touch-of-zen.csv \
-  --auto_threshold
-```
-
-This writes:
-- `classification_report.csv`
-- `predictions.csv`
-- `summary.json`
-
-to a timestamped folder under the checkpoint directory, and appends a one-line summary to `src/models/test_results.csv`.

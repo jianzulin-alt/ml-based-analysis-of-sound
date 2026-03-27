@@ -1,0 +1,60 @@
+experiment_name: film_single_label_mel_cnn_ft_irmas
+task_mode: single_label
+dataset: chinese_instruments
+feature_mode: mel
+classes:
+- brass
+- dizi
+- erhu
+- guqin
+- guzheng
+- piano
+- pipa
+- sheng
+- strings
+- suona
+- timpani
+- woodwind
+- xiao
+- yangqin
+model:
+  backbone: cnn
+  dropout: 0.4
+  pretrained_weights: src/models/saved_weights/irmas_single_label_mel_cnn/best_val.pt
+training:
+  epochs: 40
+  batch_size: 32
+  learning_rate: 5.0e-05
+  weight_decay: 0.0005
+  val_frac: 0.2
+  loss_function: focal
+  use_spec_augment: true
+  patience: 8
+  num_workers: 4
+  seed: 1337
+  mixed_precision: true
+audio_params:
+  sr: 44100
+  duration: 3.0
+  n_mels: 128
+  n_mfcc: 13
+  n_chroma: 12
+  n_bins: 120
+  bins_per_octave: 12
+  win_ms: 30.0
+  hop_ms: 10.0
+  fmin: 20.0
+  fmax: 20000.0
+  window: hann
+  loudness_norm: none
+  target_lufs: -23.0
+  loudness_peak_limit: 0.99
+  feature_norm: min_max
+  channel_swap_augmentation: false
+resolved:
+  train_config: src/configs/training/film_instruments/single_label_mel_cnn_ft_irmas.yaml
+  audio_config: src/configs/audio_params.yaml
+  labels_config: src/configs/labels.yaml
+  primary_manifest: data/processed/chinese_instruments_train_mels.csv
+  run_dir: src/models/saved_weights/film_single_label_mel_cnn_ft_irmas
+  resume_checkpoint: ''
