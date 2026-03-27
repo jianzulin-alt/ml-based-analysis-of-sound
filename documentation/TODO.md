@@ -1,12 +1,9 @@
 # TODO
 
-##  High Priority: Infrastructure & Critical Bug Fixes
-- [ ] **Fix Sample Rate Mismatch:** Update `src/preprocessing/audio_io.py` or a standalone script to resample all audio (Train, Test, IRMAS) to a uniform **44,100 Hz**.
-- [x] **Solve Label Shuffling Bug:** Ensure `run_train.py` sorts classes alphabetically on fresh runs and locks them during resume.
-- [ ] **Verify Preprocessing Consistency:** Double-check that `run_eval.py` is pulling the "Time Capsule" `audio_params` from `run_config.yaml` rather than the global file.
-- [x] **Manifest Path Fix:** Ensure `run_train.py` correctly resolves paths to `data/processed/` instead of `tmp_manifests/`.
+## Rename
 
----
+chinese_instruments -> film_instruments for dataset name
+
 
 ## Dataset Cleaning & Preparation
 - [x] **Silent File Cleanup:** Run analysis script on Chinese dataset to identify and delete silent/corrupt clips.
@@ -18,14 +15,14 @@
 ---
 
 ## Phase 2: Handling Class Imbalance
-- [ ] **Loss Function Upgrade:** Replace standard Cross-Entropy with **Focal Loss** to prioritise rare instruments like `yangqin`.
+- [x] **Loss Function Upgrade:** Replace standard Cross-Entropy with **Focal Loss** to prioritise rare instruments like `yangqin`.
 - [ ] **Advanced Augmentation:** - [ ] Implement **SpecAugment** (time/frequency masking) in the `FeatureFusionDataset`.
-    - [ ] Implement **Mixup** (mathematical blending of samples) for robust feature learning.
+    - [x] Implement **Mixup** (mathematical blending of samples) for robust feature learning.
 
 ---
 
-##  Phase 3: Transfer Learning Strategy (IRMAS ➡️ Chinese)
-- [ ] **IRMAS Pre-training:** Train the DenseNet-121 or CNN backbone on the full IRMAS set.
+##  Phase 3: Transfer Learning Strategy (IRMAS  Chinese)
+- [x] **IRMAS Pre-training:** Train the DenseNet-121 or CNN backbone on the full IRMAS set.
 - [ ] **"Freeze & Fine-Tune" Implementation:**
     - [ ] Replace the 11-class IRMAS head with the 14-class Chinese head.
     - [ ] Initial run: Freeze early conv layers, train only the head.
@@ -45,8 +42,16 @@
 - [ ] **Confusion Matrix Analysis:** Generate and save high-res matrices for both IRMAS and Film test sets.
 - [ ] **Ablation Study:** Compare performance between the standard CNN baseline and the DenseNet-121.
 
----
+## Old Changes
+- [ ] Visualise.ipynb
+  
 
 ### Past bugs
 - [ ] Label shuffling corrupts training
-- [ ] DSP drift
+- [ ] DSP drift between training and evaluation (added parameter configs to model )
+- [X] **Fix Sample Rate Mismatch:** Update `src/preprocessing/audio_io.py` or a standalone script to resample all audio (Train, Test, IRMAS) to a uniform **44,100 Hz**.
+- [x] **Solve Label Shuffling Bug:** Ensure `run_train.py` sorts classes alphabetically on fresh runs and locks them during resume.
+- [x] **Verify Preprocessing Consistency:** Double-check that `run_eval.py` is pulling the "Time Capsule" `audio_params` from `run_config.yaml` rather than the global file.
+- [x] **Manifest Path Fix:** Ensure `run_train.py` correctly resolves paths to `data/processed/` instead of `tmp_manifests/`.
+
+

@@ -1,36 +1,31 @@
 # Data
 
 Datasets for training and testing models belong in this directory
-
-## Scripts
-
 To summarise the dataset distribution run the following script: `data/scripts/summarise_data.py`
-
 To generate the dataset from raw audio sources, refer to the scripts in `data/scripts/generate_dataset.py` (Optional)
 
-**Dataset summary**
+### Train dataset summary
 
 ```plaintext
-
-  strings   1058  (14.8%)  (52m 54s) (3174.0s)
+ strings   1058  (14.8%)  (52m 54s) (3174.0s)
   brass     846  (11.9%)  (42m 18s) (2538.0s)
   woodwind  710  (10.0%)  (35m 30s) (2130.0s)
   sheng     627  (8.8%)  (31m 21s) (1881.0s)
-  dizi      621  (8.7%)  (31m 3s) (1863.0s)
-  timpani   576  (8.1%)  (28m 48s) (1728.0s)
+  dizi      620  (8.7%)  (31m) (1860.0s)
+  timpani   575  (8.1%)  (28m 45s) (1725.0s)
   erhu      542  (7.6%)  (27m 6s) (1626.0s)
   pipa      495  (6.9%)  (24m 45s) (1485.0s)
   suona     461  (6.5%)  (23m 3s) (1383.0s)
   guzheng   443  (6.2%)  (22m 9s) (1329.0s)
   guqin     282  (4.0%)  (14m 6s) (846.0s)
-  xiao      239  (3.3%)  (11m 57s) (717.0s)
+  xiao      239  (3.4%)  (11m 57s) (717.0s)
   piano     119  (1.7%)  (5m 57s) (357.0s)
   yangqin   116  (1.6%)  (5m 48s) (348.0s)
 
 Total clip counts: 7135
   ```
 
-## A touch of zen test dataset
+## A touch of zen film test dataset
 
 Download train dataset from teams under `General/Datasets/train`
 Unzip from teams and place in `data/train`

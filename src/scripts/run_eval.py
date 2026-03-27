@@ -46,19 +46,47 @@ def _read_txt_labels(path: Path) -> list[str]:
     return list(set(labels)) # Return unique labels
 
 def collect_test_samples(test_root: Path, valid_labels_set: set[str]) -> list[TestSample]:
-    """Scans the test directory for wav files and their corresponding label text files."""
+    """
+    Scans the test directory for wav files. 
+    Filters out any out-of-distribution (OOD) labels.
+    If a file only contains OOD labels, it is skipped entirely.
+    """
+    valid_labels_set = {l.strip().lower() for l in valid_labels_set}
+
     samples = []
+    skipped_count = 0
+    skipped_labels = set()
+
+    print(f"\nScanning {test_root.name} for evaluation...")
+    
     for wav_path in sorted(test_root.rglob("*.wav")):
         txt_path = wav_path.with_suffix(".txt")
         if not txt_path.exists(): 
             continue
         
+        # Read all labels in the text file
         labels = _read_txt_labels(txt_path)
-        # Keep only the labels that are in our model's classes
+        
+        # Keep only the labels the model was trained on (Closed-Set Assumption)
         valid_labels = [l for l in labels if l in valid_labels_set]
         
+        # Track what we are throwing away for the report
+        for l in labels:
+            if l not in valid_labels_set:
+                skipped_labels.add(l)
+        
         if valid_labels:
+            # The file has at least one valid instrument
             samples.append(TestSample(wav_path, txt_path, valid_labels))
+        else:
+            # The file ONLY contained unknown instruments (e.g., just 'voice')
+            skipped_count += 1
+
+    print(f"Found {len(samples)} valid test files.")
+    if skipped_count > 0:
+        print(f"Skipped {skipped_count} files entirely (contained only OOD labels).")
+        print(f"OOD labels ignored: {', '.join(sorted(list(skipped_labels)))}\n")
+        
     return samples
 
 class SlidingWindowTestDataset(Dataset):
@@ -103,6 +131,7 @@ class SlidingWindowTestDataset(Dataset):
         return x
 
     def _extract_single_feature(self, stereo: np.ndarray, feature_name: str) -> torch.Tensor:
+        # Add seperation
         if feature_name == "mel":
             feat = torch.from_numpy(compute_stereo_logmel_db(stereo, self.sr, n_fft=self.n_fft, hop=self.hop, win_length=self.win_length, n_mels=self.n_mels, fmin=self.fmin, fmax=self.fmax, window=self.window)).float()
         elif feature_name == "cqt":
@@ -149,10 +178,9 @@ def evaluate_dataset(
     model_path: str | Path,
     dataset_name: Optional[str] = None,
     test_path: Optional[str | Path] = None,
-    *,
     audio_config_path: str | Path = "src/configs/audio_params.yaml",
     num_workers: int = 4,
-    lenient_eval: bool = False, # NEW PARAMETER
+    lenient_eval: bool = False, 
 ) -> dict[str, Any]:
     
     root = get_repo_root()
@@ -166,7 +194,7 @@ def evaluate_dataset(
     task_mode = run_cfg.get("task_mode", "single_label")
     audio_params = run_cfg.get("audio_params", load_yaml(resolve_path(audio_config_path, root)).get("audio", {}))
         
-    classes = run_cfg.get("classes", [])
+    classes = [c.strip().lower() for c in run_cfg.get("classes", [])]
     if not classes: raise ValueError("Could not find a 'classes' list in run_config.yaml.")
         
     feature_mode = normalize_feature_mode(run_cfg.get("feature_mode", "mel"))
@@ -176,7 +204,21 @@ def evaluate_dataset(
     elif dataset_name: test_root = resolve_path(load_yaml(resolve_path(audio_config_path, root)).get("datasets", {}).get(dataset_name, {}).get("test", ""), root)
     else: raise ValueError("Provide dataset_name or test_path.")
 
+    if not test_root.exists():
+        raise FileNotFoundError(
+            f"Test path does not exist: {test_root}\n"
+            f"cwd: {Path.cwd()}\n"
+            "Tip: pass a path relative to the repository root, e.g. 'data/test/a-touch-of-zen'."
+        )
+    if not test_root.is_dir():
+        raise NotADirectoryError(f"Test path is not a directory: {test_root}")
+
     samples = collect_test_samples(test_root, set(classes))
+    if not samples:
+        raise ValueError(
+            f"No evaluable .wav/.txt pairs found in {test_root}. "
+            "Ensure files are paired and at least one label per file is in the model class list."
+        )
     device_str, _, _, _, pin_mem = get_device()
     infer_device = torch.device(device_str)
     
@@ -227,12 +269,22 @@ def evaluate_dataset(
                 
             filenames.extend(names)
 
-    # Scikit-learn handles both 1D (single-label) and 2D (multi-label) arrays perfectly
-    report = classification_report(all_targets, all_preds, target_names=classes, output_dict=True, zero_division=0)
-    
-    cm = None
+    # In single-label mode, explicitly provide labels so reports include all classes
+    # even when the current split only contains a subset.
     if task_mode == "single_label":
-        cm = confusion_matrix(all_targets, all_preds)
+        label_indices = list(range(len(classes)))
+        report = classification_report(
+            all_targets,
+            all_preds,
+            labels=label_indices,
+            target_names=classes,
+            output_dict=True,
+            zero_division=0,
+        )
+        cm = confusion_matrix(all_targets, all_preds, labels=label_indices)
+    else:
+        report = classification_report(all_targets, all_preds, target_names=classes, output_dict=True, zero_division=0)
+        cm = None
     
     return {
         "task_mode": task_mode,

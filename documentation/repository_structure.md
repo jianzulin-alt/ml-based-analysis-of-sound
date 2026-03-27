@@ -70,5 +70,3 @@ This document serves two primary purposes:
    Loads the trained weights and runs on-the-fly inference against unseen test directories (IRMAS or Chinese Film sets), generating classification reports.
 7. **Visualisation (`src/notebooks/`)**: 
    Consumes the output artifacts (history CSVs, prediction DataFrames) to generate learning curves and confusion matrices for reporting.
-
-#

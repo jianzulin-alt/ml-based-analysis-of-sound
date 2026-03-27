@@ -1,4 +1,4 @@
-experiment_name: "irmas_pretrain_mel_densenet"
+experiment_name: "irmas_single_label_mel_densenet"
 task_mode: "single_label"
 dataset: "irmas"
 feature_mode: "mel"
